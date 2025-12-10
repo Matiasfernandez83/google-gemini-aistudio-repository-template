@@ -1,0 +1,5 @@
+{
+  "name": "ERP Logística Integral",
+  "description": "A smart ERP dashboard for logistics that unifies PDF and Excel data to track truck plates, owners, and values using Gemini AI.",
+  "requestFramePermissions": []
+}

@@ -1,0 +1,28 @@
+{
+  "name": "erp-logística-integral",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "@google/genai": "0.1.2",
+    "lucide-react": "0.344.0",
+    "clsx": "2.1.1",
+    "xlsx": "0.18.5",
+    "recharts": "2.12.7",
+    "jspdf": "2.5.1",
+    "jspdf-autotable": "3.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}

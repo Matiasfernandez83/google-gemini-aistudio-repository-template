@@ -1,0 +1,96 @@
+
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ERP Logística Integral</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f3f4f6;
+      }
+      #app-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #f8fafc;
+        z-index: 9999;
+        transition: opacity 0.5s;
+      }
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #e2e8f0;
+        border-top: 4px solid #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      #global-error {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: #fff;
+        z-index: 10000;
+        padding: 2rem;
+        color: #ef4444;
+      }
+    </style>
+    <script>
+      // Safe Polyfill
+      window.process = window.process || { env: {} };
+      window.global = window;
+      
+      // Global Error Trap
+      window.onerror = function(msg, url, line, col, error) {
+        // Ignorar errores de red de scripts no esenciales para evitar pantalla roja
+        if (msg.includes('Failed to fetch') || msg.includes('Importing a module script failed')) {
+            console.warn('Network error detected, app will try to use fallbacks.');
+            return false;
+        }
+
+        var errDiv = document.getElementById('global-error');
+        var loader = document.getElementById('app-loader');
+        if (errDiv) {
+            errDiv.style.display = 'block';
+            errDiv.innerHTML = '<h1>Error Crítico de Carga</h1><pre>' + msg + '\n' + (error ? error.stack : '') + '</pre><button onclick="window.location.reload()" style="padding:10px; background:#333; color:#fff; margin-top:20px; cursor:pointer;">Recargar Página</button>';
+        }
+        if (loader) loader.style.display = 'none';
+        return false;
+      };
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react/": "https://esm.sh/react@18.2.0/",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@0.1.2",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0",
+    "clsx": "https://esm.sh/clsx@2.1.1",
+    "xlsx": "https://esm.sh/xlsx@0.18.5",
+    "recharts": "https://esm.sh/recharts@2.12.7?deps=react@18.2.0,react-dom@18.2.0",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2?deps=jspdf@2.5.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="app-loader">
+        <div class="spinner"></div>
+        <p style="margin-top: 20px; color: #64748b; font-weight: 500;">Cargando Sistema...</p>
+    </div>
+    <div id="global-error"></div>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
