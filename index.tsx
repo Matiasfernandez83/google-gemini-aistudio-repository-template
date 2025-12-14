@@ -14,6 +14,9 @@ interface ErrorBoundaryState {
 // Simple Error Boundary to catch React rendering errors
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = { hasError: false, error: null };
+  
+  // Explicitly declare props to resolve TS error: Property 'props' does not exist on type 'ErrorBoundary'
+  declare props: Readonly<ErrorBoundaryProps>;
 
   constructor(props: ErrorBoundaryProps) {
     super(props);

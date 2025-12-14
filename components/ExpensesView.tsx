@@ -1,10 +1,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { CreditCard, UploadCloud, Loader2, DollarSign, Activity, FileSpreadsheet, X, AlertCircle, Trash2, ListFilter, ChevronLeft, ChevronRight, Download } from 'lucide-react';
-import { ExpenseRecord, ProcessingStatus, ThemeSettings, FileType, UploadedFile } from '../types';
+import { CreditCard, UploadCloud, Loader2, DollarSign, Activity, FileSpreadsheet, X, AlertCircle, Trash2, ListFilter, ChevronLeft, ChevronRight, Download, Eye, Calendar, Building, User } from 'lucide-react';
+import { ExpenseRecord, ProcessingStatus, ThemeSettings, FileType, UploadedFile, CardStatement } from '../types';
 import { parseExcelToCSV, fileToBase64 } from '../utils/excelParser';
 import { processCardExpenses } from '../services/geminiService';
-import { saveExpenses, saveFiles, deleteExpenses } from '../utils/storage';
+import { saveExpenses, saveFiles, deleteExpenses, saveStatements, getStatements } from '../utils/storage';
 import { ConfirmModal } from './ConfirmModal';
 
 interface ExpensesViewProps {
@@ -15,6 +15,7 @@ interface ExpensesViewProps {
 }
 
 export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpensesUpdated, onViewDetail, theme }) => {
+    const [statements, setStatements] = useState<CardStatement[]>([]);
     const [files, setFiles] = useState<File[]>([]);
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -30,25 +31,27 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
     
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Reset page when data changes (e.g. date filter changes)
+    // Initial Load of Statements
+    useEffect(() => {
+        loadStatements();
+    }, []);
+
+    const loadStatements = async () => {
+        const loaded = await getStatements();
+        setStatements(loaded.sort((a, b) => b.timestamp - a.timestamp));
+    };
+
+    // Reset page when data changes
     useEffect(() => {
         setCurrentPage(1);
         setSelectedIds([]);
     }, [expenses.length]);
 
-    // --- INDICATORS ---
-    const totalAmount = expenses.reduce((acc, curr) => acc + curr.monto, 0);
+    // --- INDICATORS (GLOBAL) ---
+    // Calculate total bill amount (Sum of all statements' totals, not just expenses)
+    const globalBillTotal = statements.reduce((acc, curr) => acc + (curr.totalResumen || 0), 0);
     const totalTransactions = expenses.length;
     
-    // Calculate expense by file
-    const expensesByFile = expenses.reduce((acc, curr) => {
-        const fileName = curr.sourceFileName || 'Desconocido';
-        if (!acc[fileName]) acc[fileName] = 0;
-        acc[fileName] += curr.monto;
-        return acc;
-    }, {} as Record<string, number>);
-
-    const maxFileEntry = Object.entries(expensesByFile).sort((a: [string, number], b: [string, number]) => b[1] - a[1])[0] as [string, number] | undefined;
     const formatCurrency = (val: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(val);
 
     // --- PAGINATION LOGIC ---
@@ -96,12 +99,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
         }
     };
 
-    const handleViewMaxFile = () => {
-        if (maxFileEntry) {
-             const [fileName, amount] = maxFileEntry;
-             const recordsForFile = expenses.filter(e => (e.sourceFileName || 'Desconocido') === fileName);
-             onViewDetail(`Detalle: ${fileName}`, recordsForFile);
-        }
+    const handleCardDoubleClick = (stmt: CardStatement) => {
+        const fileExpenses = expenses.filter(e => e.statementId === stmt.id || e.sourceFileId === stmt.sourceFileId);
+        onViewDetail(`Detalle Resumen: ${stmt.banco} (${stmt.periodo || 'Periodo'})`, fileExpenses);
     };
 
     const handleExport = async () => {
@@ -130,7 +130,9 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
     const handleProcess = async () => {
         if (files.length === 0) return;
         setStatus({ isProcessing: true, error: null, success: false, processedCount: 0, totalCount: files.length });
+        
         const newExpenses: ExpenseRecord[] = [];
+        const newStatements: CardStatement[] = [];
         const filesToSave: UploadedFile[] = [];
         let successCount = 0;
         const failedFiles: string[] = [];
@@ -139,6 +141,8 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const fileId = `exp-file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const statementId = `stmt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
                 try {
                     let contentData = '';
                     let mimeType = '';
@@ -149,9 +153,35 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
                         contentData = await parseExcelToCSV(file);
                         mimeType = 'text/plain';
                     }
+
+                    // Process with Enhanced Service (Metadata + Items)
                     const result = await processCardExpenses([{ mimeType, data: contentData }]);
-                    const taggedResult = result.map(r => ({ ...r, sourceFileId: fileId, sourceFileName: file.name }));
+                    
+                    // Create Statement Metadata Object
+                    const statement: CardStatement = {
+                        id: statementId,
+                        sourceFileId: fileId,
+                        banco: result.metadata.banco || "Banco Desconocido",
+                        titular: result.metadata.titular || "Titular Desconocido",
+                        periodo: result.metadata.periodo || "Sin Periodo",
+                        fechaVencimiento: result.metadata.fechaVencimiento || "Sin Vto",
+                        totalResumen: result.metadata.totalResumen || 0,
+                        totalPeajes: result.items.reduce((acc, curr) => acc + curr.monto, 0),
+                        timestamp: Date.now()
+                    };
+                    
+                    newStatements.push(statement);
+
+                    // Create Items
+                    const taggedResult = result.items.map((r, idx) => ({ 
+                        ...r, 
+                        id: `exp-${statementId}-${idx}`,
+                        statementId: statementId,
+                        sourceFileId: fileId, 
+                        sourceFileName: file.name 
+                    }));
                     newExpenses.push(...taggedResult);
+                    
                     filesToSave.push({ id: fileId, name: file.name, type: file.type, size: file.size, content: contentData });
                     successCount++;
                     setStatus(prev => ({ ...prev, processedCount: successCount }));
@@ -159,11 +189,16 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
                     failedFiles.push(`${file.name}: ${err.message}`);
                 }
             }
-            if (newExpenses.length > 0) {
+
+            if (newStatements.length > 0) {
+                await saveStatements(newStatements);
                 await saveExpenses(newExpenses);
                 await saveFiles(filesToSave);
+                
+                await loadStatements(); // Refresh local statements
                 onExpensesUpdated([...expenses, ...newExpenses]);
             }
+
             setStatus({ isProcessing: false, error: failedFiles.length > 0 ? `Errores: ${failedFiles.join(', ')}` : null, success: successCount > 0 });
             if (failedFiles.length === 0) setFiles([]);
         } catch (e: any) {
@@ -175,26 +210,39 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
             <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Gestión de Tarjetas y Peajes</h2>
-                    <p className="text-slate-500">Selecciona filas para eliminar. Haz doble click en las tarjetas para ver detalle.</p>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Billetera de Resúmenes</h2>
+                    <p className="text-slate-500">Gestión centralizada de múltiples tarjetas y peajes.</p>
+                </div>
+                
+                {/* GLOBAL CONSOLIDATED CARD */}
+                <div className="bg-slate-900 text-white p-4 rounded-xl shadow-lg flex items-center gap-6 min-w-[300px]">
+                    <div className="p-3 bg-blue-500 rounded-lg">
+                        <Activity size={24} />
+                    </div>
+                    <div>
+                        <p className="text-slate-400 text-xs uppercase font-bold tracking-wider">Deuda Total Consolidada</p>
+                        <p className="text-2xl font-bold">{formatCurrency(globalBillTotal)}</p>
+                        <p className="text-xs text-slate-400">{statements.length} resúmenes activos</p>
+                    </div>
                 </div>
             </div>
 
-            {/* STATUS CARDS */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-fit">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* UPLOADER CARD */}
+                <div className="lg:col-span-3 bg-white p-6 rounded-xl shadow-sm border border-slate-100 h-fit">
                     <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                        <UploadCloud size={20} className={`text-${theme.primaryColor}-500`}/> Subir Resumen
+                        <UploadCloud size={20} className={`text-${theme.primaryColor}-500`}/> Cargar Resumen
                     </h3>
                     <div className={`border-2 border-dashed border-slate-300 rounded-lg p-6 flex flex-col items-center justify-center bg-slate-50 hover:bg-${theme.primaryColor}-50 cursor-pointer mb-4`} onClick={() => fileInputRef.current?.click()}>
                         <input type="file" multiple ref={fileInputRef} className="hidden" accept=".pdf,.xlsx,.xls,.csv" onChange={handleFileSelect} />
                         <CreditCard size={32} className={`text-${theme.primaryColor}-400 mb-2`} />
-                        <p className="text-sm font-medium text-slate-700">Seleccionar Resumen</p>
+                        <p className="text-sm font-medium text-slate-700 text-center">Subir PDF/Excel Bancario</p>
                     </div>
                     {files.length > 0 && (
                         <div className="space-y-3">
                             <button onClick={handleProcess} disabled={status.isProcessing} className={`w-full py-2 bg-${theme.primaryColor}-600 text-white rounded-lg font-bold hover:bg-${theme.primaryColor}-700 disabled:opacity-50 flex justify-center items-center gap-2`}>
-                                {status.isProcessing ? <Loader2 className="animate-spin" size={16}/> : 'Procesar Gastos'}
+                                {status.isProcessing ? <Loader2 className="animate-spin" size={16}/> : 'Procesar e Identificar'}
                             </button>
                         </div>
                     )}
@@ -202,35 +250,73 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
                     {status.error && <div className="mt-2 text-xs text-red-600 flex items-start gap-1"><AlertCircle size={12} className="mt-0.5"/> {status.error}</div>}
                 </div>
 
-                <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 cursor-pointer relative group" onDoubleClick={() => onViewDetail('Todos los Gastos', expenses)}>
-                        <div>
-                            <p className="text-sm text-slate-500 font-medium">Total Gastos (Filtrado)</p>
-                            <p className="text-2xl font-bold text-slate-900">{formatCurrency(totalAmount)}</p>
-                            <p className="text-xs text-slate-400 mt-1">{totalTransactions} movimientos en vista</p>
-                        </div>
-                        <div className="absolute top-4 right-4 p-3 bg-orange-100 text-orange-600 rounded-full"><DollarSign size={24} /></div>
-                    </div>
+                {/* CARDS SCROLLABLE AREA */}
+                <div className="lg:col-span-9">
+                    {statements.length === 0 ? (
+                         <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-8 text-slate-400 bg-slate-50/50">
+                            <CreditCard size={48} className="mb-2 opacity-20" />
+                            <p>No hay resúmenes cargados.</p>
+                         </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {statements.map((stmt) => (
+                                <div 
+                                    key={stmt.id} 
+                                    className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 cursor-pointer hover:shadow-md hover:border-blue-300 transition-all group relative overflow-hidden"
+                                    onDoubleClick={() => handleCardDoubleClick(stmt)}
+                                >
+                                    <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded-full flex items-center gap-1">
+                                            <Eye size={10} /> Doble click
+                                        </div>
+                                    </div>
 
-                    <div 
-                        className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 cursor-pointer relative group"
-                        onDoubleClick={handleViewMaxFile}
-                    >
-                        <div>
-                            <p className="text-sm text-slate-500 font-medium">Mayor Consumo</p>
-                            <p className="text-lg font-bold text-slate-900 truncate max-w-[150px]">{maxFileEntry ? maxFileEntry[0] : '---'}</p>
-                            <p className="text-xs text-green-600 font-bold mt-1">{maxFileEntry ? formatCurrency(maxFileEntry[1]) : '$0'}</p>
+                                    {/* Bank Header */}
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 font-bold text-xs uppercase">
+                                            {stmt.banco.substring(0,3)}
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-slate-800 text-sm truncate max-w-[150px]">{stmt.banco}</h4>
+                                            <p className="text-xs text-slate-500 flex items-center gap-1">
+                                                <User size={10}/> {stmt.titular}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Amount Info */}
+                                    <div className="mb-4">
+                                        <p className="text-xs text-slate-500 uppercase tracking-wide">Total a Pagar</p>
+                                        <p className="text-xl font-bold text-slate-900">{formatCurrency(stmt.totalResumen)}</p>
+                                        {stmt.totalPeajes !== undefined && stmt.totalPeajes > 0 && (
+                                            <p className="text-xs text-blue-600 font-medium mt-1">
+                                                Peajes detectados: {formatCurrency(stmt.totalPeajes)}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Date Footer */}
+                                    <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                                            <Calendar size={12} />
+                                            <span>{stmt.periodo}</span>
+                                        </div>
+                                        <div className="text-xs font-bold text-red-600 bg-red-50 px-2 py-1 rounded">
+                                            Vence: {stmt.fechaVencimiento}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <div className="absolute top-4 right-4 p-3 bg-blue-100 text-blue-600 rounded-full"><FileSpreadsheet size={24} /></div>
-                    </div>
+                    )}
                 </div>
             </div>
 
-            {/* MAIN TABLE */}
+            {/* EXPENSES TABLE (Consolidated) */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-100 flex flex-col">
                 <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50">
                     <h3 className="text-lg font-bold text-slate-800">
-                        Listado de Movimientos 
+                        Detalle de Gastos (Peajes y Autopistas)
                         {selectedIds.length > 0 && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{selectedIds.length} seleccionados</span>}
                     </h3>
                     <div className="flex gap-2">
@@ -258,7 +344,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
                                 <th className="px-6 py-4">Fecha</th>
                                 <th className="px-6 py-4">Concepto</th>
                                 <th className="px-6 py-4">Categoría</th>
-                                <th className="px-6 py-4">Archivo</th>
+                                <th className="px-6 py-4">Resumen Origen</th>
                                 <th className="px-6 py-4 text-right">Monto</th>
                             </tr>
                         </thead>
@@ -279,7 +365,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
                     </table>
                 </div>
 
-                {/* FOOTER PAGINATION (Idéntico a DataTable) */}
+                {/* FOOTER PAGINATION */}
                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-slate-600">
                     <div className="flex items-center gap-2">
                         <span className="text-slate-400">Mostrando</span>
@@ -334,7 +420,7 @@ export const ExpensesView: React.FC<ExpensesViewProps> = ({ expenses, onExpenses
                 </div>
             </div>
 
-            <ConfirmModal isOpen={showDeleteConfirm} title="¿Eliminar registros?" message={`Estás a punto de borrar ${selectedIds.length} ítems.`} confirmText="Sí, Eliminar" onConfirm={confirmDelete} onClose={() => setShowDeleteConfirm(false)} isDestructive />
+            <ConfirmModal isOpen={showDeleteConfirm} title="¿Eliminar registros?" message={`Estás a punto de borrar ${selectedIds.length} ítems. Esto no borrará la tarjeta/resumen en sí, solo los gastos seleccionados.`} confirmText="Sí, Eliminar" onConfirm={confirmDelete} onClose={() => setShowDeleteConfirm(false)} isDestructive />
         </div>
     );
 };

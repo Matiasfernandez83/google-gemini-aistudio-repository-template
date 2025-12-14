@@ -12,7 +12,7 @@ import { ImportView } from './components/ImportView';
 import { ConverterView } from './components/ConverterView';
 import { ConfirmModal } from './components/ConfirmModal'; 
 import { ExpensesView } from './components/ExpensesView';
-import { Database, CheckCircle2, ArrowRightLeft, FileSpreadsheet, AlertTriangle, RefreshCw, Menu, Calendar } from 'lucide-react';
+import { Database, CheckCircle2, ArrowRightLeft, FileSpreadsheet, AlertTriangle, RefreshCw, Menu, Calendar, Trash2, UploadCloud, ChevronDown } from 'lucide-react';
 import { TruckRecord, ExpenseRecord, ProcessingStatus, FileType, FleetRecord, View, UploadedFile, ModalData, User, ThemeSettings } from './types';
 import { parseExcelToCSV, fileToBase64, parseExcelToJSON } from './utils/excelParser';
 import { processDocuments, convertPdfToData } from './services/geminiService';
@@ -38,6 +38,7 @@ function App() {
   // --- DATE FILTER STATE (GLOBAL) ---
   const [dateFilter, setDateFilter] = useState<{start: string, end: string}>({ start: '', end: '' });
   const startDateRef = useRef<HTMLInputElement>(null);
+  const endDateRef = useRef<HTMLInputElement>(null);
 
   // Mobile Sidebar State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -63,8 +64,6 @@ function App() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [recordsToDelete, setRecordsToDelete] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
-  const dbInputRef = useRef<HTMLInputElement>(null);
 
   // --- INITIALIZATION ---
   const refreshSystem = async () => {
@@ -467,6 +466,82 @@ function App() {
       return <LoginScreen onLogin={handleLogin} themeColor={theme.primaryColor} />;
   }
 
+  // Common Header Helper for Dashboard and Expenses
+  const renderDashboardToolbar = () => (
+    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+        {/* IMPROVED DATE PICKER */}
+        <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm h-10 overflow-hidden group hover:border-blue-300 transition-colors">
+            <button 
+                className="px-3 h-full flex items-center gap-2 bg-slate-50 border-r border-slate-100 text-slate-600 hover:text-blue-600 transition-colors"
+                onClick={() => {
+                    if (startDateRef.current) {
+                        // Attempt to open picker
+                        try { startDateRef.current.showPicker(); } catch (e) { startDateRef.current.focus(); }
+                    }
+                }}
+            >
+                <Calendar size={16} />
+                <span className="text-xs font-bold uppercase hidden sm:inline">Fecha</span>
+            </button>
+            <div className="flex items-center px-2 gap-2">
+                <div className="relative">
+                    <input 
+                        ref={startDateRef}
+                        type="date" 
+                        className="text-sm text-slate-700 font-medium bg-transparent focus:outline-none cursor-pointer w-[110px]"
+                        value={dateFilter.start}
+                        onChange={(e) => setDateFilter(prev => ({ ...prev, start: e.target.value }))}
+                        placeholder="Desde"
+                    />
+                </div>
+                <span className="text-slate-300">→</span>
+                <div className="relative">
+                     <input 
+                        ref={endDateRef}
+                        type="date" 
+                        className="text-sm text-slate-700 font-medium bg-transparent focus:outline-none cursor-pointer w-[110px]"
+                        value={dateFilter.end}
+                        onChange={(e) => setDateFilter(prev => ({ ...prev, end: e.target.value }))}
+                        placeholder="Hasta"
+                    />
+                </div>
+            </div>
+            {(dateFilter.start || dateFilter.end) && (
+                <button 
+                    onClick={() => setDateFilter({ start: '', end: '' })} 
+                    className="px-2 h-full text-slate-400 hover:text-red-500 hover:bg-red-50 border-l border-slate-100 transition-colors"
+                    title="Limpiar fechas"
+                >
+                    <Trash2 size={14} />
+                </button>
+            )}
+        </div>
+
+        {/* QUICK ACTIONS TOOLBAR (Only for Dashboard View) */}
+        {currentView === 'dashboard' && (
+            <div className="flex items-center gap-2">
+                <button 
+                    onClick={() => setShowClearConfirm(true)}
+                    className="h-10 px-4 bg-white border border-slate-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-200 transition-colors shadow-sm flex items-center gap-2"
+                    title="Limpiar todos los datos"
+                >
+                    <Trash2 size={16} /> <span className="hidden lg:inline">Limpiar Tabla</span>
+                </button>
+            </div>
+        )}
+
+        <button 
+            onClick={refreshSystem}
+            disabled={isRefreshing}
+            className={`h-10 w-10 md:w-auto md:px-4 flex items-center justify-center gap-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-all shadow-md ${isRefreshing ? 'opacity-70' : ''}`}
+            title="Actualizar Sistema"
+        >
+            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            <span className="hidden md:inline">{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+        </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex transition-colors duration-300">
       <Sidebar 
@@ -478,7 +553,7 @@ function App() {
       
       <main className="md:ml-64 p-4 md:p-8 flex-1 overflow-y-auto h-screen w-full">
         {/* HEADER */}
-        <header className="flex flex-col xl:flex-row justify-between xl:items-center mb-8 gap-4">
+        <header className="flex flex-col xl:flex-row justify-between xl:items-center mb-6 gap-4">
           <div className="flex items-center gap-4">
              <button className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" onClick={() => setIsSidebarOpen(true)}>
                 <Menu size={24} />
@@ -491,68 +566,16 @@ function App() {
                     currentView === 'expenses' ? 'Gastos de Tarjetas' :
                     currentView === 'reports' ? 'Reportes y Archivos' : 'Ajustes del Sistema'}
                 </h2>
+                <p className="text-sm text-slate-500 hidden md:block">
+                     {currentView === 'dashboard' ? 'Visión general de operaciones y flota.' : 
+                     currentView === 'import' ? 'Carga de archivos y gestión de base maestra.' : 
+                     'Administración del sistema ERP.'}
+                </p>
              </div>
           </div>
           
-          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
-             {/* DATE FILTER UI - GLOBAL */}
-             {(currentView === 'dashboard' || currentView === 'expenses') && (
-                 <div className="bg-white border border-slate-200 rounded-lg flex items-center p-1 gap-2 shadow-sm">
-                    <div 
-                        className="flex items-center gap-2 px-2 border-r border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors"
-                        onClick={() => {
-                            // Robust open picker for all browsers
-                            if (startDateRef.current) {
-                                try {
-                                    startDateRef.current.showPicker();
-                                } catch (e) {
-                                    startDateRef.current.focus();
-                                }
-                            }
-                        }}
-                    >
-                        <Calendar size={16} className="text-slate-400" />
-                        <span className="text-xs font-bold text-slate-500 uppercase">Filtrar Fecha</span>
-                    </div>
-                    <input 
-                        ref={startDateRef}
-                        type="date" 
-                        className="text-sm text-slate-700 bg-transparent focus:outline-none cursor-pointer"
-                        value={dateFilter.start}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, start: e.target.value }))}
-                        onClick={(e) => {
-                             try { (e.target as HTMLInputElement).showPicker(); } catch(err) {}
-                        }}
-                        title="Fecha Inicio"
-                    />
-                    <span className="text-slate-300">-</span>
-                    <input 
-                        type="date" 
-                        className="text-sm text-slate-700 bg-transparent focus:outline-none cursor-pointer"
-                        value={dateFilter.end}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, end: e.target.value }))}
-                        onClick={(e) => {
-                             try { (e.target as HTMLInputElement).showPicker(); } catch(err) {}
-                        }}
-                        title="Fecha Fin"
-                    />
-                    {(dateFilter.start || dateFilter.end) && (
-                        <button onClick={() => setDateFilter({ start: '', end: '' })} className="text-xs text-red-500 font-bold px-2 hover:underline">
-                            Borrar
-                        </button>
-                    )}
-                 </div>
-             )}
-
-             <button 
-                onClick={refreshSystem}
-                disabled={isRefreshing}
-                className={`flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm ${isRefreshing ? 'opacity-50' : ''}`}
-             >
-                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-                <span className="hidden md:inline">{isRefreshing ? '...' : 'Actualizar'}</span>
-             </button>
-          </div>
+          {/* RENDER TOOLBAR FOR DASHBOARD OR EXPENSES */}
+          {(currentView === 'dashboard' || currentView === 'expenses') && renderDashboardToolbar()}
         </header>
         
         {/* MAIN VIEWS */}
@@ -570,7 +593,7 @@ function App() {
               />
         ) : currentView === 'expenses' ? (
               <ExpensesView 
-                  expenses={filteredExpenses} // Passing FILTERED expenses
+                  expenses={filteredExpenses} 
                   onExpensesUpdated={setExpenses}
                   onViewDetail={(title, records) => setModalData({ isOpen: true, title, type: 'list', dataType: 'expense', records })}
                   theme={theme}
@@ -606,6 +629,8 @@ function App() {
                             onRemoveFile={(idx) => setFiles(prev => prev.filter((_, i) => i !== idx))} 
                             onProcess={handleProcess}
                             theme={theme}
+                            fleetDbCount={fleetDb.length}
+                            onDbUpload={handleDbSelect}
                         />
                      ) : (
                         <ConverterView 
@@ -620,57 +645,12 @@ function App() {
                   </div>
         ) : (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 lg:col-span-1">
-                            <h3 className="text-lg font-bold text-slate-800 mb-2 flex items-center gap-2">
-                                <Database size={20} className={`text-${theme.primaryColor}-500`}/>
-                                Base de Datos Maestra
-                            </h3>
-                            {fleetDb.length > 0 ? (
-                                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                                    <div className="flex items-center gap-2 text-green-700 font-bold mb-1">
-                                        <CheckCircle2 size={20} />
-                                        <span>Base Activa</span>
-                                    </div>
-                                    <p className="text-sm text-green-600">{fleetDb.length} equipos registrados.</p>
-                                    <button onClick={() => dbInputRef.current?.click()} className="text-xs text-green-700 underline mt-2">Actualizar</button>
-                                </div>
-                            ) : (
-                                <div onClick={() => dbInputRef.current?.click()} className="border-2 border-dashed border-slate-300 rounded-lg p-4 flex flex-col items-center justify-center bg-slate-50 cursor-pointer hover:bg-slate-100">
-                                    <FileSpreadsheet className="text-slate-400 mb-2" />
-                                    <span className="text-sm text-slate-600 text-center">Cargar Flota (Excel)</span>
-                                </div>
-                            )}
-                             <input type="file" ref={dbInputRef} className="hidden" accept=".xlsx,.xls,.csv" onChange={handleDbSelect} />
-                        </section>
-
-                        <section className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 lg:col-span-2 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                             <div>
-                                <h3 className="text-lg font-bold text-slate-800">Acciones Rápidas</h3>
-                                <p className="text-slate-500 text-sm">Gestiona tus datos actuales</p>
-                             </div>
-                             <div className="flex gap-3 w-full md:w-auto">
-                                <button 
-                                    onClick={() => setCurrentView('import')}
-                                    className={`flex-1 md:flex-none px-4 py-2 bg-${theme.primaryColor}-600 text-white rounded-lg text-sm font-medium hover:bg-${theme.primaryColor}-700 transition-colors whitespace-nowrap`}
-                                >
-                                    + Subir Archivos
-                                </button>
-                                <button 
-                                    onClick={() => setShowClearConfirm(true)}
-                                    className="flex-1 md:flex-none px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors whitespace-nowrap"
-                                >
-                                    Limpiar Tabla
-                                </button>
-                             </div>
-                        </section>
-                      </div>
-
-                      {/* DATA TABLE WRAPPER WITH FILTERING */}
+                      
+                      {/* STATS & CHARTS - FULL WIDTH */}
                       {filteredRecords.length > 0 ? (
                         <>
-                            {/* Pass Filtered Records to Stats and Charts to ensure Global Filtering works */}
                             <Stats data={filteredRecords} onCardDoubleClick={handleStatClick} />
+                            
                             <Charts data={filteredRecords} onBarClick={handleChartClick} />
                             
                             <DataTable 
@@ -678,15 +658,28 @@ function App() {
                                 onRowDoubleClick={(r) => setModalData({ isOpen: true, title: 'Detalle', type: 'detail', dataType: 'truck', singleRecord: r })} 
                                 onViewFile={handleViewFile}
                                 onDelete={triggerDeleteSelection}
-                                // removed dateFilter prop as data is now filtered in App.tsx
                             />
                         </>
                       ) : (
-                          <div className="text-center py-20 text-slate-400 bg-white rounded-xl border border-slate-100 border-dashed">
-                              {dateFilter.start || dateFilter.end 
-                                ? <p>No hay datos en el rango de fechas seleccionado.</p>
-                                : <p>No hay datos. Ve a "Importar Datos".</p>
-                              }
+                          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 border-dashed">
+                              <div className="p-4 bg-slate-50 rounded-full mb-4">
+                                  <Database className="text-slate-300" size={48} />
+                              </div>
+                              <h3 className="text-lg font-bold text-slate-700">Sin datos disponibles</h3>
+                              <p className="text-slate-500 mb-6 text-center max-w-md">
+                                  {dateFilter.start || dateFilter.end 
+                                    ? "No se encontraron movimientos en el rango de fechas seleccionado."
+                                    : "La base de datos está vacía. Dirígete a 'Importar Datos' para comenzar."
+                                  }
+                              </p>
+                              {!(dateFilter.start || dateFilter.end) && (
+                                  <button 
+                                      onClick={() => setCurrentView('import')}
+                                      className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                                  >
+                                      Ir a Importar Datos
+                                  </button>
+                              )}
                           </div>
                       )}
                   </div>

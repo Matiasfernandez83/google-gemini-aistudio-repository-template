@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X, CheckCircle, AlertTriangle, Truck, User, Tag, Calendar, FileText, DollarSign, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, CheckCircle, AlertTriangle, Truck, User, Tag, Calendar, FileText, DollarSign, ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { TruckRecord, ModalData, ExpenseRecord } from '../types';
 
 interface DetailModalProps {
@@ -10,6 +10,7 @@ interface DetailModalProps {
 
 export const DetailModal: React.FC<DetailModalProps> = ({ modalData, onClose }) => {
   const [currentPage, setCurrentPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const itemsPerPage = 10;
 
   // Reset page when modal opens/changes
@@ -29,27 +30,91 @@ export const DetailModal: React.FC<DetailModalProps> = ({ modalData, onClose }) 
 
   const isExpense = modalData.dataType === 'expense';
 
+  const handleExportExcel = async () => {
+      if (records.length === 0) return;
+      setIsExporting(true);
+
+      try {
+          const XLSX = await import('xlsx');
+          
+          let exportData: any[] = [];
+
+          if (isExpense) {
+              // Format for Expenses
+              exportData = (records as ExpenseRecord[]).map(r => ({
+                  FECHA: r.fecha || '',
+                  CONCEPTO: r.concepto,
+                  CATEGORIA: r.categoria,
+                  ARCHIVO_ORIGEN: r.sourceFileName || '',
+                  MONTO: r.monto
+              }));
+          } else {
+              // Format for Trucks
+              exportData = (records as TruckRecord[]).map(r => ({
+                  PATENTE: r.patente,
+                  EQUIPO: r.equipo || '',
+                  DUEÑO: r.dueno,
+                  TAG: r.tag || '',
+                  CONCEPTO: r.concepto,
+                  FECHA: r.fecha || '',
+                  VALOR: r.valor,
+                  ESTADO: r.isVerified ? 'VERIFICADO' : 'PENDIENTE'
+              }));
+          }
+
+          const ws = XLSX.utils.json_to_sheet(exportData);
+          const wb = XLSX.utils.book_new();
+          
+          // Sanitize title for filename
+          const safeTitle = modalData.title.replace(/[^a-z0-9]/gi, '_').substring(0, 30);
+          XLSX.utils.book_append_sheet(wb, ws, "Detalle");
+          
+          XLSX.writeFile(wb, `Reporte_${safeTitle}_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+      } catch (error) {
+          console.error("Error exporting excel from modal", error);
+          alert("Hubo un error al generar el Excel.");
+      } finally {
+          setIsExporting(false);
+      }
+  };
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 md:p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-xl shadow-2xl w-full md:max-w-4xl max-h-[95vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
         <div className="p-4 md:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <div>
+          <div className="flex-1 mr-4">
             <h3 className="text-lg md:text-xl font-bold text-slate-800 line-clamp-1">{modalData.title}</h3>
             <p className="text-xs md:text-sm text-slate-500">
                 {modalData.type === 'list' 
-                    ? `Visualizando ${records.length} registros en total`
+                    ? `Visualizando ${records.length} registros`
                     : 'Detalle completo del registro'
                 }
             </p>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 bg-white border border-slate-200 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors shadow-sm ml-2 flex-shrink-0"
-          >
-            <X size={20} />
-          </button>
+          
+          <div className="flex items-center gap-2">
+            {modalData.type === 'list' && records.length > 0 && (
+                <button
+                    onClick={handleExportExcel}
+                    disabled={isExporting}
+                    className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded-lg text-sm font-bold transition-colors disabled:opacity-50"
+                    title="Descargar esta lista en Excel"
+                >
+                    {isExporting ? <Loader2 size={16} className="animate-spin"/> : <Download size={16} />}
+                    <span className="hidden sm:inline">Excel</span>
+                </button>
+            )}
+
+            <button 
+                onClick={onClose}
+                className="p-2 bg-white border border-slate-200 rounded-full hover:bg-red-50 hover:text-red-500 transition-colors shadow-sm ml-2 flex-shrink-0"
+            >
+                <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}

@@ -27,8 +27,21 @@ export interface TruckRecord {
   searchIndex?: string; // Normalized string for fast search
 }
 
+export interface CardStatement {
+    id: string;
+    sourceFileId: string;
+    banco: string;       // Galicia, Santander, Amex, etc.
+    titular: string;     // Nombre del dueño de la tarjeta
+    periodo: string;     // Ej: "01 Feb - 28 Feb"
+    fechaVencimiento: string; // YYYY-MM-DD
+    totalResumen: number; // El total a pagar de TODO el resumen (no solo peajes)
+    totalPeajes?: number; // Suma calculada de los items extraídos
+    timestamp: number;
+}
+
 export interface ExpenseRecord {
   id: string;
+  statementId?: string; // Link to parent statement
   fecha: string;
   concepto: string;
   monto: number;

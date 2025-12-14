@@ -1,16 +1,17 @@
 
-import { FleetRecord, TruckRecord, ExpenseRecord, UploadedFile, User, ThemeSettings, AuditLog } from "../types";
+import { FleetRecord, TruckRecord, ExpenseRecord, CardStatement, UploadedFile, User, ThemeSettings, AuditLog } from "../types";
 
 const DB_NAME = 'LogisticaAI_DB';
-const DB_VERSION = 5; // Incremented for Audit Store and Indices
+const DB_VERSION = 6; // Updated for Statements Store
 const STORES = {
   RECORDS: 'records',
   EXPENSES: 'expenses',
+  STATEMENTS: 'statements', // New Store
   FLEET: 'fleet',
   FILES: 'files',
   USERS: 'users',
   SETTINGS: 'settings',
-  AUDIT: 'audit' // New Store
+  AUDIT: 'audit'
 };
 
 // --- HELPER: SEARCH INDEX GENERATOR ---
@@ -45,7 +46,6 @@ const openDB = (): Promise<IDBDatabase> => {
         store.createIndex('fecha', 'fecha', { unique: false });
         store.createIndex('patente', 'patente', { unique: false });
       } else {
-         // Add indices if upgrading from older version
          const store = request.transaction!.objectStore(STORES.RECORDS);
          if (!store.indexNames.contains('fecha')) store.createIndex('fecha', 'fecha', { unique: false });
       }
@@ -54,6 +54,12 @@ const openDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORES.EXPENSES)) {
         const store = db.createObjectStore(STORES.EXPENSES, { keyPath: 'id' });
         store.createIndex('fecha', 'fecha', { unique: false });
+      }
+
+      // STATEMENTS (New)
+      if (!db.objectStoreNames.contains(STORES.STATEMENTS)) {
+        const store = db.createObjectStore(STORES.STATEMENTS, { keyPath: 'id' });
+        store.createIndex('sourceFileId', 'sourceFileId', { unique: false });
       }
 
       // FLEET
@@ -85,7 +91,7 @@ const openDB = (): Promise<IDBDatabase> => {
         db.createObjectStore(STORES.SETTINGS, { keyPath: 'key' });
       }
 
-      // AUDIT (New)
+      // AUDIT
       if (!db.objectStoreNames.contains(STORES.AUDIT)) {
         const auditStore = db.createObjectStore(STORES.AUDIT, { keyPath: 'id' });
         auditStore.createIndex('timestamp', 'timestamp', { unique: false });
@@ -134,7 +140,7 @@ export const getAuditLogs = async (): Promise<AuditLog[]> => {
         const tx = db.transaction(STORES.AUDIT, 'readonly');
         const store = tx.objectStore(STORES.AUDIT);
         const index = store.index('timestamp');
-        // Get in reverse order (newest first) - simple implementations use getAll then sort
+        // Get in reverse order (newest first)
         const request = index.getAll();
         request.onsuccess = () => {
             resolve(request.result.sort((a, b) => b.timestamp - a.timestamp));
@@ -142,7 +148,7 @@ export const getAuditLogs = async (): Promise<AuditLog[]> => {
     });
 };
 
-// --- RECORDS (Optimized) ---
+// --- RECORDS (Trucks) ---
 
 export const saveRecords = async (records: TruckRecord[], currentUser?: User | null): Promise<void> => {
   const db = await openDB();
@@ -150,7 +156,6 @@ export const saveRecords = async (records: TruckRecord[], currentUser?: User | n
   const store = tx.objectStore(STORES.RECORDS);
   
   records.forEach(record => {
-      // Add Search Index for "Internal Memory"
       record.searchIndex = generateSearchIndex(record);
       store.put(record);
   });
@@ -168,7 +173,7 @@ export const getRecords = async (): Promise<TruckRecord[]> => {
     const tx = db.transaction(STORES.RECORDS, 'readonly');
     const store = tx.objectStore(STORES.RECORDS);
     const request = store.getAll();
-    request.onsuccess = () => resolve(request.result || []); // Return empty array if null
+    request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => resolve([]);
   });
 };
@@ -193,7 +198,26 @@ export const deleteRecords = async (ids: string[], currentUser?: User): Promise<
     return new Promise((resolve) => tx.oncomplete = () => resolve());
 };
 
-// --- EXPENSES (Optimized) ---
+// --- STATEMENTS & EXPENSES (New Logic) ---
+
+export const saveStatements = async (statements: CardStatement[]): Promise<void> => {
+    const db = await openDB();
+    const tx = db.transaction(STORES.STATEMENTS, 'readwrite');
+    const store = tx.objectStore(STORES.STATEMENTS);
+    statements.forEach(stmt => store.put(stmt));
+    return new Promise((resolve) => { tx.oncomplete = () => resolve(); });
+};
+
+export const getStatements = async (): Promise<CardStatement[]> => {
+    const db = await openDB();
+    return new Promise((resolve) => {
+        const tx = db.transaction(STORES.STATEMENTS, 'readonly');
+        const store = tx.objectStore(STORES.STATEMENTS);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result || []);
+        request.onerror = () => resolve([]);
+    });
+};
 
 export const saveExpenses = async (records: ExpenseRecord[], currentUser?: User | null): Promise<void> => {
   const db = await openDB();
@@ -234,33 +258,54 @@ export const deleteExpenses = async (ids: string[], currentUser?: User): Promise
     return new Promise((resolve) => tx.oncomplete = () => resolve());
 };
 
-// --- FILES & FLEET ---
+// --- FILES (Batch Deletion Update) ---
 
 export const deleteRecordsByFileId = async (fileId: string, currentUser?: User): Promise<void> => {
+    await deleteBatchFiles([fileId], currentUser);
+};
+
+export const deleteBatchFiles = async (fileIds: string[], currentUser?: User): Promise<void> => {
     const db = await openDB();
     
-    // Truck Records
-    const txRecords = db.transaction(STORES.RECORDS, 'readwrite');
-    const storeRecords = txRecords.objectStore(STORES.RECORDS);
+    // 1. Get associated data to delete
     const allRecords = await getRecords();
-    const recordsToDelete = allRecords.filter(r => r.sourceFileId === fileId);
-    recordsToDelete.forEach(r => storeRecords.delete(r.id));
-    
-    await new Promise<void>(resolve => { txRecords.oncomplete = () => resolve(); });
-
-    // Expenses
-    const txExpenses = db.transaction(STORES.EXPENSES, 'readwrite');
-    const storeExpenses = txExpenses.objectStore(STORES.EXPENSES);
     const allExpenses = await getExpenses();
-    const expensesToDelete = allExpenses.filter(e => e.sourceFileId === fileId);
-    expensesToDelete.forEach(e => storeExpenses.delete(e.id));
-    
-    await new Promise<void>(resolve => { txExpenses.oncomplete = () => resolve(); });
-    
-    if (currentUser) {
-        logAction(currentUser, 'DELETE', 'Archivos', `Archivo ${fileId} eliminado con ${recordsToDelete.length + expensesToDelete.length} registros asociados.`);
-    }
+    const allStatements = await getStatements();
+
+    const recordsToDelete = allRecords.filter(r => r.sourceFileId && fileIds.includes(r.sourceFileId)).map(r => r.id);
+    const expensesToDelete = allExpenses.filter(e => e.sourceFileId && fileIds.includes(e.sourceFileId)).map(e => e.id);
+    const statementsToDelete = allStatements.filter(s => fileIds.includes(s.sourceFileId)).map(s => s.id);
+
+    // 2. Open a multi-store transaction
+    const tx = db.transaction([STORES.FILES, STORES.RECORDS, STORES.EXPENSES, STORES.STATEMENTS], 'readwrite');
+    const fileStore = tx.objectStore(STORES.FILES);
+    const recordStore = tx.objectStore(STORES.RECORDS);
+    const expenseStore = tx.objectStore(STORES.EXPENSES);
+    const statementStore = tx.objectStore(STORES.STATEMENTS);
+
+    // 3. Execute Deletions
+    fileIds.forEach(id => fileStore.delete(id));
+    recordsToDelete.forEach(id => recordStore.delete(id));
+    expensesToDelete.forEach(id => expenseStore.delete(id));
+    statementsToDelete.forEach(id => statementStore.delete(id));
+
+    return new Promise((resolve, reject) => {
+        tx.oncomplete = async () => {
+            if (currentUser) {
+                await logAction(
+                    currentUser, 
+                    'DELETE', 
+                    'Reportes', 
+                    `Eliminación masiva: ${fileIds.length} archivos, ${statementsToDelete.length} resúmenes, ${expensesToDelete.length} gastos.`
+                );
+            }
+            resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+    });
 };
+
+// --- FLEET ---
 
 export const saveFleet = async (fleet: FleetRecord[], currentUser?: User): Promise<void> => {
   const db = await openDB();
@@ -282,6 +327,8 @@ export const getFleet = async (): Promise<FleetRecord[]> => {
     request.onerror = () => resolve([]);
   });
 };
+
+// --- FILES ---
 
 export const saveFiles = async (files: UploadedFile[]): Promise<void> => {
     const db = await openDB();
@@ -328,7 +375,7 @@ export const deleteFile = async (id: string): Promise<void> => {
     return new Promise((resolve) => tx.oncomplete = () => resolve());
 };
 
-// --- USERS (Validation & Security) ---
+// --- USERS ---
 
 export const getUsers = async (): Promise<User[]> => {
     const db = await openDB();
