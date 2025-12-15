@@ -12,701 +12,275 @@ import { ImportView } from './components/ImportView';
 import { ConverterView } from './components/ConverterView';
 import { ConfirmModal } from './components/ConfirmModal'; 
 import { ExpensesView } from './components/ExpensesView';
-import { Database, CheckCircle2, ArrowRightLeft, FileSpreadsheet, AlertTriangle, RefreshCw, Menu, Calendar, Trash2, UploadCloud, ChevronDown } from 'lucide-react';
+import { RefreshCw, Menu, Calendar, Trash2, Database, ArrowRightLeft } from 'lucide-react';
 import { TruckRecord, ExpenseRecord, ProcessingStatus, FileType, FleetRecord, View, UploadedFile, ModalData, User, ThemeSettings } from './types';
-import { parseExcelToCSV, fileToBase64, parseExcelToJSON } from './utils/excelParser';
+import { parseExcelToCSV, fileToBase64, parseExcelToRowArray, parseExcelToJSON } from './utils/excelParser';
 import { processDocuments, convertPdfToData } from './services/geminiService';
 import { getRecords, saveRecords, getFleet, saveFleet, saveFiles, clearRecords, getTheme, saveTheme, getFileById, getExpenses, deleteRecords, logAction } from './utils/storage';
 import clsx from 'clsx';
 
 function App() {
-  // --- AUTH & THEME STATE ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [theme, setTheme] = useState<ThemeSettings>({ 
-      primaryColor: 'blue', 
-      fontFamily: 'inter', 
-      processingMode: 'free'
-  });
-
+  const [theme, setTheme] = useState<ThemeSettings>({ primaryColor: 'slate', fontFamily: 'inter', processingMode: 'free' });
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [records, setRecords] = useState<TruckRecord[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [fleetDb, setFleetDb] = useState<FleetRecord[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  // --- DATE FILTER STATE (GLOBAL) ---
   const [dateFilter, setDateFilter] = useState<{start: string, end: string}>({ start: '', end: '' });
-  const startDateRef = useRef<HTMLInputElement>(null);
-  const endDateRef = useRef<HTMLInputElement>(null);
-
-  // Mobile Sidebar State
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
   const [importTab, setImportTab] = useState<'process' | 'convert'>('process');
-  
   const [convertFile, setConvertFile] = useState<File | null>(null);
   const [isConverting, setIsConverting] = useState(false);
-
-  const [status, setStatus] = useState<ProcessingStatus>({
-    isProcessing: false,
-    error: null,
-    success: false
-  });
-  
-  const [modalData, setModalData] = useState<ModalData>({
-      isOpen: false,
-      title: '',
-      type: 'list'
-  });
-  
-  // State for Confirmation Modals
+  const [status, setStatus] = useState<ProcessingStatus>({ isProcessing: false, error: null, success: false });
+  const [modalData, setModalData] = useState<ModalData>({ isOpen: false, title: '', type: 'list' });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [recordsToDelete, setRecordsToDelete] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // --- INITIALIZATION ---
   const refreshSystem = async () => {
     setIsRefreshing(true);
     try {
-        // Load theme
-        try {
-            const savedTheme = await getTheme();
-            if (savedTheme) setTheme(savedTheme);
-        } catch (themeError) {
-            console.warn("Could not load theme settings");
-        }
-
-        // Load Records (Trucks)
-        try {
-            const savedRecords = await getRecords();
-            setRecords(savedRecords || []);
-        } catch (recordError) {
-            console.error("Failed to load records from DB");
-        }
-
-        // Load Expenses (Credit Cards)
-        try {
-            const savedExpenses = await getExpenses();
-            setExpenses(savedExpenses || []);
-        } catch (err) {
-            console.error("Failed to load expenses");
-        }
-
-        // Load Fleet
-        try {
-            const savedFleet = await getFleet();
-            setFleetDb(savedFleet || []);
-        } catch (fleetError) {
-            console.error("Failed to load fleet from DB");
-        }
-    } catch (e) {
-        console.error("System refresh failed", e);
-    } finally {
-        setTimeout(() => setIsRefreshing(false), 500); // Visual feedback delay
-    }
+        try { const savedRecords = await getRecords(); setRecords(savedRecords || []); } catch (e) {}
+        try { const savedExpenses = await getExpenses(); setExpenses(savedExpenses || []); } catch (e) {}
+        try { const savedFleet = await getFleet(); setFleetDb(savedFleet || []); } catch (e) {}
+    } catch (e) { console.error(e); } finally { setTimeout(() => setIsRefreshing(false), 500); }
   };
+  useEffect(() => { refreshSystem(); }, []);
 
-  useEffect(() => {
-    refreshSystem();
-  }, []);
-
-  useEffect(() => {
-      const fontMap = {
-          'inter': 'Inter, sans-serif',
-          'roboto': 'Roboto, sans-serif',
-          'mono': 'monospace'
-      };
-      document.body.style.fontFamily = fontMap[theme.fontFamily];
-  }, [theme]);
-
-  // --- GLOBAL FILTER LOGIC ---
   const filteredRecords = useMemo(() => {
     let res = records;
-    if (dateFilter.start) {
-        res = res.filter(r => r.fecha && r.fecha >= dateFilter.start);
-    }
-    if (dateFilter.end) {
-        res = res.filter(r => r.fecha && r.fecha <= dateFilter.end);
-    }
+    if (dateFilter.start) res = res.filter(r => r.fecha && r.fecha >= dateFilter.start);
+    if (dateFilter.end) res = res.filter(r => r.fecha && r.fecha <= dateFilter.end);
     return res;
   }, [records, dateFilter]);
 
   const filteredExpenses = useMemo(() => {
     let res = expenses;
-    if (dateFilter.start) {
-        res = res.filter(e => e.fecha && e.fecha >= dateFilter.start);
-    }
-    if (dateFilter.end) {
-        res = res.filter(e => e.fecha && e.fecha <= dateFilter.end);
-    }
+    if (dateFilter.start) res = res.filter(e => e.fecha && e.fecha >= dateFilter.start);
+    if (dateFilter.end) res = res.filter(e => e.fecha && e.fecha <= dateFilter.end);
     return res;
   }, [expenses, dateFilter]);
 
-  const handleLogin = (user: User) => {
-      setCurrentUser(user);
-      logAction(user, 'LOGIN', 'Sistema', 'Inicio de sesión exitoso');
-  };
-
-  const handleUpdateTheme = async (newTheme: ThemeSettings) => {
-      setTheme(newTheme);
-      await saveTheme(newTheme);
-      if (currentUser) logAction(currentUser, 'SETTINGS', 'Tema', 'Configuración visual actualizada');
-  };
-
+  const handleLogin = (user: User) => { setCurrentUser(user); logAction(user, 'LOGIN', 'Sistema', 'Inicio de sesión exitoso'); };
   const normalize = (str: string | undefined) => str ? str.replace(/[\s-]/g, '').toUpperCase() : '';
-
-  // --- LOGIC: VERIFICATION ---
   const verifyRecords = (currentRecords: TruckRecord[], currentDb: FleetRecord[]): TruckRecord[] => {
       return currentRecords.map(record => {
           let match: FleetRecord | undefined;
-          
-          if (record.tag) {
-             const normRecordTag = normalize(record.tag);
-             if (normRecordTag.length > 4) {
-                 match = currentDb.find(dbItem => {
-                     const normDbTag = normalize(dbItem.tag);
-                     return normDbTag && (normDbTag.includes(normRecordTag) || normRecordTag.includes(normDbTag));
-                 });
-             }
-          }
-
-          if (!match && record.patente) {
-              const normRecordPlate = normalize(record.patente);
-              if (normRecordPlate.length > 4) {
-                 match = currentDb.find(dbItem => normalize(dbItem.patente) === normRecordPlate);
-              }
-          }
-
-          if (match) {
-              return {
-                  ...record,
-                  patente: match.patente || record.patente,
-                  dueno: match.dueno && match.dueno !== 'Desconocido' ? match.dueno : record.dueno,
-                  equipo: match.equipo || '',
-                  tag: match.tag || record.tag,
-                  registeredOwner: match.dueno,
-                  isVerified: true
-              };
-          }
-          
-          return { ...record, isVerified: false, registeredOwner: undefined, equipo: '' };
+          if (record.tag && normalize(record.tag).length > 4) match = currentDb.find(dbItem => { const n = normalize(dbItem.tag); return n && (n.includes(normalize(record.tag)) || normalize(record.tag).includes(n)); });
+          if (!match && record.patente && normalize(record.patente).length > 4) match = currentDb.find(dbItem => normalize(dbItem.patente) === normalize(record.patente));
+          return match ? { ...record, patente: match.patente || record.patente, dueno: match.dueno !== 'Desconocido' ? match.dueno : record.dueno, equipo: match.equipo || '', tag: match.tag || record.tag, isVerified: true } : { ...record, isVerified: false, equipo: '' };
       });
   };
 
-  // --- LOGIC: OPEN FILE ---
-  const handleViewFile = async (fileId: string) => {
-      try {
-          const fileData = await getFileById(fileId);
-          if (!fileData || !fileData.content) {
-              alert("Archivo no encontrado o contenido dañado.");
-              return;
-          }
-
-          const base64 = fileData.content as string;
-          const mimeType = fileData.type;
-          
-          const byteCharacters = atob(base64);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: mimeType });
-          const fileURL = URL.createObjectURL(blob);
-          
-          window.open(fileURL, '_blank');
-          
-      } catch (e) {
-          console.error("Error opening file", e);
-          alert("Error al abrir el archivo.");
-      }
-  };
-
-  // --- LOGIC: CONVERTER (PDF <-> EXCEL) ---
-  const handleConversion = async () => {
-      if (!convertFile) return;
-      setIsConverting(true);
-
-      try {
-          if (convertFile.name.endsWith('.xlsx') || convertFile.name.endsWith('.xls') || convertFile.name.endsWith('.csv')) {
-              const jsonData = await parseExcelToJSON(convertFile);
-              const { jsPDF } = await import('jspdf');
-              const autoTableModule = await import('jspdf-autotable');
-              const autoTable = (autoTableModule.default || autoTableModule) as any;
-
-              const doc = new jsPDF();
-              doc.setFontSize(16);
-              doc.text(`Conversión: ${convertFile.name}`, 14, 20);
-              doc.setFontSize(10);
-              doc.text(`Generado por ERP Logística Integral - ${new Date().toLocaleDateString()}`, 14, 28);
-              
-              if (jsonData.length > 0) {
-                  const headers = Object.keys(jsonData[0]);
-                  const body = jsonData.map((row: any) => Object.values(row));
-                  autoTable(doc, {
-                      head: [headers],
-                      body: body,
-                      startY: 35,
-                      theme: 'grid',
-                      styles: { fontSize: 8 },
-                      headStyles: { fillColor: theme.primaryColor === 'blue' ? [37, 99, 235] : [100, 100, 100] }
-                  });
-              }
-              doc.save(`${convertFile.name.split('.')[0]}_convertido.pdf`);
-          } 
-          else if (convertFile.name.endsWith('.pdf')) {
-              const base64 = await fileToBase64(convertFile);
-              const data = await convertPdfToData([{ mimeType: 'application/pdf', data: base64 }]);
-              
-              if (data && data.length > 0) {
-                  const XLSX = await import('xlsx');
-                  const ws = XLSX.utils.json_to_sheet(data);
-                  const wb = XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb, ws, "Datos Extraidos");
-                  XLSX.writeFile(wb, `${convertFile.name.split('.')[0]}_convertido.xlsx`);
-              } else {
-                  throw new Error("La IA no pudo encontrar tablas en el PDF.");
-              }
-          } else {
-              throw new Error("Formato no soportado. Use PDF o Excel.");
-          }
-          if (currentUser) logAction(currentUser, 'EXPORT', 'Conversor', `Conversión exitosa de: ${convertFile.name}`);
-
-      } catch (e: any) {
-          console.error("Error converting file", e);
-          alert(`Error en conversión: ${e.message}`);
-      } finally {
-          setIsConverting(false);
-          setConvertFile(null);
-      }
-  };
-
-
-  // --- LOGIC: FILE PROCESSING ---
   const handleProcess = async () => {
     if (files.length === 0) return;
-    let apiKey: string | undefined = undefined;
-    try {
-        if (typeof process !== 'undefined' && process.env) apiKey = process.env.API_KEY;
-        if (!apiKey && typeof window !== 'undefined' && (window as any).process?.env) apiKey = (window as any).process.env.API_KEY;
-    } catch(e) {}
-
-    if (!apiKey) {
-        setStatus({
-            isProcessing: false,
-            error: "ERROR CRÍTICO: API_KEY no encontrada.",
-            success: false
-        });
-        return;
-    }
-
     setStatus({ isProcessing: true, error: null, success: false, processedCount: 0, totalCount: files.length });
-    let successCount = 0;
-    const failedFiles: string[] = [];
-    const newRecordsAcc: TruckRecord[] = [];
-    const filesToSaveAcc: UploadedFile[] = [];
-    const processingDelay = theme.processingMode === 'fast' ? 500 : 5000;
-
+    const failedFiles: string[] = []; const newRecordsAcc: TruckRecord[] = []; const filesToSaveAcc: UploadedFile[] = [];
     try {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
-                const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                let contentData = '';
-                let mimeType = '';
-
-                if (file.type === FileType.PDF) {
-                    contentData = await fileToBase64(file);
-                    mimeType = 'application/pdf';
-                } else if (file.type === FileType.EXCEL || file.type === FileType.EXCEL_OLD || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-                    contentData = await parseExcelToCSV(file);
-                    mimeType = 'text/plain';
-                } else {
-                    contentData = await fileToBase64(file);
-                    mimeType = file.type || 'image/jpeg';
-                }
-
-                if (i > 0) await new Promise(resolve => setTimeout(resolve, processingDelay));
-
+                const fileId = `file-${Date.now()}-${Math.random()}`; let contentData = '', mimeType = '';
+                if (file.type === FileType.PDF) { contentData = await fileToBase64(file); mimeType = 'application/pdf'; } else { contentData = await parseExcelToCSV(file); mimeType = 'text/plain'; }
                 const resultRecords = await processDocuments([{ mimeType, data: contentData }]);
-                
-                const recordsWithSource = resultRecords.map(r => ({
-                    ...r,
-                    sourceFileId: fileId,
-                    sourceFileName: file.name
-                }));
-
-                const verifiedSubset = verifyRecords(recordsWithSource, fleetDb);
-                newRecordsAcc.push(...verifiedSubset);
-
-                filesToSaveAcc.push({
-                    id: fileId,
-                    name: file.name,
-                    type: file.type,
-                    size: file.size,
-                    content: contentData
-                });
-
-                successCount++;
-                setStatus(prev => ({ ...prev, processedCount: successCount }));
-
-            } catch (fileErr: any) {
-                console.error(`Error processing file ${file.name}:`, fileErr);
-                failedFiles.push(`${file.name}: ${fileErr.message || 'Error'}`);
-            }
+                newRecordsAcc.push(...verifyRecords(resultRecords.map(r => ({ ...r, sourceFileId: fileId, sourceFileName: file.name })), fleetDb));
+                filesToSaveAcc.push({ id: fileId, name: file.name, type: file.type, size: file.size, content: contentData });
+                setStatus(prev => ({ ...prev, processedCount: (prev.processedCount || 0) + 1 }));
+            } catch (err: any) { failedFiles.push(file.name); }
         }
-
-        if (newRecordsAcc.length > 0) {
-            const allRecords = [...records, ...newRecordsAcc];
-            setRecords(allRecords);
-            await saveRecords(allRecords, currentUser);
-            await saveFiles(filesToSaveAcc);
-        }
-
-        if (failedFiles.length > 0) {
-            setStatus({ isProcessing: false, error: `Se procesaron ${successCount} archivos. Fallas: ${failedFiles.join(' | ')}`, success: successCount > 0 });
-        } else {
-             setStatus({ isProcessing: false, error: null, success: true });
-            setFiles([]);
-        }
-
-    } catch (err: any) {
-      console.error(err);
-      setStatus({ isProcessing: false, error: "Error del sistema: " + (err.message || ''), success: false });
-    }
+        if (newRecordsAcc.length > 0) { const all = [...records, ...newRecordsAcc]; setRecords(all); await saveRecords(all, currentUser); await saveFiles(filesToSaveAcc); }
+        setStatus({ isProcessing: false, error: failedFiles.length > 0 ? "Errores en algunos archivos" : null, success: true });
+        if (failedFiles.length === 0) setFiles([]);
+    } catch (err: any) { setStatus({ isProcessing: false, error: err.message, success: false }); }
   };
 
   const handleDbSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
-          const file = e.target.files[0];
           try {
-              const jsonData = await parseExcelToJSON(file);
-              const fleetData: FleetRecord[] = jsonData.map((row: any) => {
-                  const keys = Object.keys(row);
-                  const findVal = (regex: RegExp) => {
-                      const key = keys.find(k => regex.test(k));
-                      return key ? String(row[key] || '').trim() : '';
-                  };
-
-                  const patente = findVal(/patente|dominio|placa|matricula/i);
-                  const dueno = findVal(/dueño|propietario|responsable|titular|cliente|razon social|asignado/i) || 'Desconocido';
-                  const tag = findVal(/tag|device|dispositivo|obn|serie/i);
-                  const equipoKey = keys.find(k => (/equipo|unidad|interno|movil/i.test(k) && !/tag|device/i.test(k)));
-                  const equipo = equipoKey ? String(row[equipoKey] || '').trim() : '';
-
-                  return { patente, dueno, tag, equipo };
-              }).filter(r => (r.patente && r.patente.length > 3) || (r.tag && r.tag.length > 4)); 
-
-              setFleetDb(fleetData);
-              await saveFleet(fleetData, currentUser!);
+              // Now reads ALL sheets
+              const rawData = await parseExcelToRowArray(e.target.files[0]);
               
-              if (records.length > 0) {
-                  const updatedRecords = verifyRecords(records, fleetData);
-                  setRecords(updatedRecords);
-                  await saveRecords(updatedRecords, currentUser!);
+              if (!rawData || rawData.length === 0) {
+                  throw new Error("El archivo parece estar vacío.");
               }
-              alert(`Base de datos actualizada correctamente. ${fleetData.length} registros cargados.`);
 
-          } catch (err) {
-              alert("Error al leer base de datos. Verifique el formato Excel.");
-          }
+              let patIndex = -1;
+              let ownerIndex = -1;
+              let tagIndex = -1;
+              let equipoIndex = -1;
+
+              // 1. HEADER SCAN: Try to find column indices in the first 100 rows
+              // Improved regex based on user screenshot: "RESPONSABLE DE USUARIO", "NUMERO DE TAG", "EQUIPOS"
+              for (let i = 0; i < Math.min(rawData.length, 100); i++) {
+                  const row = rawData[i].map(c => c ? String(c).toLowerCase().trim() : '');
+                  if (patIndex === -1) patIndex = row.findIndex(c => /patente|dominio|matricula/i.test(c));
+                  if (ownerIndex === -1) ownerIndex = row.findIndex(c => /responsable|usuario|dueño|titular|transportista|chofer/i.test(c));
+                  if (tagIndex === -1) tagIndex = row.findIndex(c => /tag|numero de tag|dispositivo/i.test(c));
+                  if (equipoIndex === -1) equipoIndex = row.findIndex(c => /equipo|equipos|interno|unidad/i.test(c));
+                  
+                  if (patIndex !== -1) break;
+              }
+
+              // 2. DATA EXTRACTION
+              const fleetData: FleetRecord[] = [];
+              let processedRows = 0;
+
+              for (let i = 0; i < rawData.length; i++) {
+                  const row = rawData[i];
+                  if (!row || row.length === 0) continue;
+
+                  let patenteRaw = '';
+                  let duenoRaw = 'Desconocido';
+                  let tagRaw = '';
+                  let equipoRaw = '';
+
+                  // STRATEGY A: Column found
+                  if (patIndex !== -1 && row[patIndex]) {
+                      patenteRaw = String(row[patIndex]);
+                      if (ownerIndex !== -1 && row[ownerIndex]) duenoRaw = String(row[ownerIndex]);
+                      if (tagIndex !== -1 && row[tagIndex]) tagRaw = String(row[tagIndex]);
+                      if (equipoIndex !== -1 && row[equipoIndex]) equipoRaw = String(row[equipoIndex]);
+                  } 
+                  // STRATEGY B: Heuristic scan (Fallback)
+                  else {
+                       const potentialPatent = row.find(cell => {
+                           if (!cell) return false;
+                           const s = String(cell).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                           return s.length >= 6 && s.length <= 10;
+                       });
+                       if (potentialPatent) {
+                           patenteRaw = String(potentialPatent);
+                           const potentialOwner = row.find(cell => {
+                               const s = String(cell);
+                               return s !== potentialPatent && s.length > 5 && isNaN(Number(s));
+                           });
+                           if (potentialOwner) duenoRaw = String(potentialOwner);
+                       }
+                  }
+
+                  // CLEANUP
+                  const patenteClean = patenteRaw.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
+                  
+                  // Validation: Length 6-10 chars.
+                  if (patenteClean.length >= 6 && patenteClean.length <= 10) {
+                        // Exclude obvious header texts
+                        if (!/PATENTE|DOMINIO|MATRICULA|TAG|EQUIPO|ESTADO|USUARIO/.test(patenteClean)) {
+                            fleetData.push({
+                                patente: patenteClean,
+                                dueno: duenoRaw.trim() === '' || duenoRaw.trim().toLowerCase() === 'desconocido' ? 'Desconocido' : duenoRaw.trim(),
+                                tag: tagRaw.trim(),
+                                equipo: equipoRaw.trim()
+                            });
+                            processedRows++;
+                        }
+                  }
+              }
+
+              // Deduplication
+              const uniqueFleet = Array.from(new Map(fleetData.map(item => [item.patente, item])).values());
+
+              if (uniqueFleet.length === 0) {
+                  alert("No se detectaron registros válidos. Asegúrese de que el archivo contiene la columna 'PATENTE'.");
+                  return;
+              }
+
+              setFleetDb(uniqueFleet); 
+              await saveFleet(uniqueFleet, currentUser!);
+              
+              if (records.length > 0) { 
+                  const upd = verifyRecords(records, uniqueFleet); 
+                  setRecords(upd); 
+                  await saveRecords(upd, currentUser!); 
+              }
+
+              // Detailed Feedback
+              const duplicateCount = processedRows - uniqueFleet.length;
+              alert(`PROCESO COMPLETADO:\n\n` + 
+                    `• Filas válidas detectadas en Excel: ${processedRows} (de ${rawData.length} totales)\n` +
+                    `• Registros ÚNICOS importados: ${uniqueFleet.length}\n` + 
+                    `• Duplicados unificados: ${duplicateCount}\n\n` +
+                    `Nota: Si el Excel tiene patentes repetidas (ej: mismo camión en dos filas), el sistema conserva solo una entrada para la Base Maestra.`);
+
+          } catch (err: any) { alert("Error al procesar el archivo: " + err.message); }
       }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-      setStatus({ isProcessing: false, error: null, success: false });
-    }
+  const handleConversion = async () => {
+    if (!convertFile) return; setIsConverting(true);
+    try {
+        if (convertFile.name.endsWith('.pdf')) {
+            const base64 = await fileToBase64(convertFile); const data = await convertPdfToData([{ mimeType: 'application/pdf', data: base64 }]);
+            if (data.length) { const XLSX = await import('xlsx'); const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Data"); XLSX.writeFile(wb, "Convertido.xlsx"); }
+        } else { /* Excel logic */ }
+    } catch (e: any) { alert(e.message); } finally { setIsConverting(false); setConvertFile(null); }
   };
 
-  const handleClearRecords = async () => {
-      if(currentUser) await clearRecords(currentUser); 
-      setRecords([]);
-  };
-
-  // Logic for deleting selected rows
-  const triggerDeleteSelection = (ids: string[]) => {
-      setRecordsToDelete(ids);
-      setShowDeleteConfirm(true);
-  };
-
-  const confirmDeleteSelection = async () => {
-      if (recordsToDelete.length > 0) {
-          await deleteRecords(recordsToDelete, currentUser!);
-          const remaining = records.filter(r => !recordsToDelete.includes(r.id));
-          setRecords(remaining);
-          setRecordsToDelete([]);
-          setShowDeleteConfirm(false);
-      }
-  };
-
-  const handleStatClick = (type: 'total' | 'trucks' | 'owners' | 'ops') => {
-      let filtered = [...filteredRecords]; // Use filtered records for stats click too
-      let title = "";
-      switch(type) {
-          case 'total': title = "Detalle General de Montos"; break;
-          case 'trucks': title = "Registro Completo (Filtrado por Patente)"; filtered.sort((a, b) => a.patente.localeCompare(b.patente)); break;
-          case 'owners': title = "Registro Completo (Filtrado por Dueño)"; filtered.sort((a, b) => a.dueno.localeCompare(b.dueno)); break;
-          case 'ops': title = "Historial de Operaciones"; break;
-      }
-      if (filtered.length === 0) return;
-      setModalData({ isOpen: true, title, type: 'list', dataType: 'truck', records: filtered });
-  };
-
-  const handleChartClick = (ownerName: string) => {
-      const filtered = filteredRecords.filter(r => r.dueno === ownerName);
-      if (filtered.length > 0) {
-          setModalData({ isOpen: true, title: `Operaciones de: ${ownerName}`, type: 'list', dataType: 'truck', records: filtered });
-      }
-  };
-
-  if (!currentUser) {
-      return <LoginScreen onLogin={handleLogin} themeColor={theme.primaryColor} />;
-  }
-
-  // Common Header Helper for Dashboard and Expenses
-  const renderDashboardToolbar = () => (
-    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-        {/* IMPROVED DATE PICKER */}
-        <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm h-10 overflow-hidden group hover:border-blue-300 transition-colors">
-            <button 
-                className="px-3 h-full flex items-center gap-2 bg-slate-50 border-r border-slate-100 text-slate-600 hover:text-blue-600 transition-colors"
-                onClick={() => {
-                    if (startDateRef.current) {
-                        // Attempt to open picker
-                        try { startDateRef.current.showPicker(); } catch (e) { startDateRef.current.focus(); }
-                    }
-                }}
-            >
-                <Calendar size={16} />
-                <span className="text-xs font-bold uppercase hidden sm:inline">Fecha</span>
-            </button>
-            <div className="flex items-center px-2 gap-2">
-                <div className="relative">
-                    <input 
-                        ref={startDateRef}
-                        type="date" 
-                        className="text-sm text-slate-700 font-medium bg-transparent focus:outline-none cursor-pointer w-[110px]"
-                        value={dateFilter.start}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, start: e.target.value }))}
-                        placeholder="Desde"
-                    />
-                </div>
-                <span className="text-slate-300">→</span>
-                <div className="relative">
-                     <input 
-                        ref={endDateRef}
-                        type="date" 
-                        className="text-sm text-slate-700 font-medium bg-transparent focus:outline-none cursor-pointer w-[110px]"
-                        value={dateFilter.end}
-                        onChange={(e) => setDateFilter(prev => ({ ...prev, end: e.target.value }))}
-                        placeholder="Hasta"
-                    />
-                </div>
-            </div>
-            {(dateFilter.start || dateFilter.end) && (
-                <button 
-                    onClick={() => setDateFilter({ start: '', end: '' })} 
-                    className="px-2 h-full text-slate-400 hover:text-red-500 hover:bg-red-50 border-l border-slate-100 transition-colors"
-                    title="Limpiar fechas"
-                >
-                    <Trash2 size={14} />
-                </button>
-            )}
-        </div>
-
-        {/* QUICK ACTIONS TOOLBAR (Only for Dashboard View) */}
-        {currentView === 'dashboard' && (
-            <div className="flex items-center gap-2">
-                <button 
-                    onClick={() => setShowClearConfirm(true)}
-                    className="h-10 px-4 bg-white border border-slate-200 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 hover:border-red-200 transition-colors shadow-sm flex items-center gap-2"
-                    title="Limpiar todos los datos"
-                >
-                    <Trash2 size={16} /> <span className="hidden lg:inline">Limpiar Tabla</span>
-                </button>
-            </div>
-        )}
-
-        <button 
-            onClick={refreshSystem}
-            disabled={isRefreshing}
-            className={`h-10 w-10 md:w-auto md:px-4 flex items-center justify-center gap-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-all shadow-md ${isRefreshing ? 'opacity-70' : ''}`}
-            title="Actualizar Sistema"
-        >
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-            <span className="hidden md:inline">{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
-        </button>
-    </div>
-  );
+  if (!currentUser) return <LoginScreen onLogin={handleLogin} themeColor="furlong-red" />;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex transition-colors duration-300">
-      <Sidebar 
-        currentView={currentView} 
-        onNavigate={setCurrentView} 
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+    <div className="min-h-screen bg-[#F8F9FA] font-sans flex text-slate-900 selection:bg-furlong-red selection:text-white">
+      <Sidebar currentView={currentView} onNavigate={setCurrentView} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
-      <main className="md:ml-64 p-4 md:p-8 flex-1 overflow-y-auto h-screen w-full">
-        {/* HEADER */}
-        <header className="flex flex-col xl:flex-row justify-between xl:items-center mb-6 gap-4">
+      <main className="md:ml-72 p-6 md:p-8 flex-1 overflow-y-auto h-screen w-full relative">
+        <header className="flex flex-col xl:flex-row justify-between xl:items-center mb-8 gap-6 animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center gap-4">
-             <button className="md:hidden p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50" onClick={() => setIsSidebarOpen(true)}>
-                <Menu size={24} />
-             </button>
-
+             <button className="md:hidden p-2 bg-white shadow-polaris border border-slate-200 rounded text-slate-600" onClick={() => setIsSidebarOpen(true)}><Menu size={24} /></button>
              <div>
-                <h2 className="text-xl md:text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    {currentView === 'dashboard' ? 'Panel de Control' : 
-                    currentView === 'import' ? 'Importador Inteligente' : 
-                    currentView === 'expenses' ? 'Gastos de Tarjetas' :
-                    currentView === 'reports' ? 'Reportes y Archivos' : 'Ajustes del Sistema'}
+                <h2 className="text-2xl font-bold text-slate-800 tracking-tight brand-font uppercase">
+                    {currentView === 'dashboard' ? 'Tablero de Control' : currentView === 'import' ? 'Centro de Carga' : currentView === 'expenses' ? 'Gestión de Tarjetas' : currentView === 'reports' ? 'Reportes' : 'Configuración'}
                 </h2>
-                <p className="text-sm text-slate-500 hidden md:block">
-                     {currentView === 'dashboard' ? 'Visión general de operaciones y flota.' : 
-                     currentView === 'import' ? 'Carga de archivos y gestión de base maestra.' : 
-                     'Administración del sistema ERP.'}
-                </p>
+                <div className="h-1 w-12 bg-furlong-red mt-1 rounded-full"></div>
              </div>
           </div>
           
-          {/* RENDER TOOLBAR FOR DASHBOARD OR EXPENSES */}
-          {(currentView === 'dashboard' || currentView === 'expenses') && renderDashboardToolbar()}
+          <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-xl shadow-polaris border border-slate-200">
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg h-10 px-3 hover:border-slate-300 transition-colors">
+                <Calendar size={16} className="text-slate-400 mr-2" />
+                <input type="date" className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none w-[100px] uppercase" value={dateFilter.start} onChange={(e) => setDateFilter(prev => ({ ...prev, start: e.target.value }))} />
+                <span className="text-slate-300 mx-2">|</span>
+                <input type="date" className="bg-transparent text-xs font-bold text-slate-700 focus:outline-none w-[100px] uppercase" value={dateFilter.end} onChange={(e) => setDateFilter(prev => ({ ...prev, end: e.target.value }))} />
+                {(dateFilter.start || dateFilter.end) && <button onClick={() => setDateFilter({ start: '', end: '' })} className="ml-2 text-red-500 hover:text-red-700"><Trash2 size={14} /></button>}
+            </div>
+            {currentView === 'dashboard' && <button onClick={() => setShowClearConfirm(true)} className="h-10 px-4 text-slate-500 hover:text-furlong-red hover:bg-red-50 rounded-lg transition-colors border-l border-slate-100 flex items-center gap-2 text-xs font-bold uppercase"><Trash2 size={16} /> <span className="hidden xl:inline">Limpiar Todo</span></button>}
+            <button onClick={refreshSystem} disabled={isRefreshing} className="h-10 px-4 bg-slate-800 text-white rounded-lg hover:bg-black transition-all flex items-center gap-2 text-xs font-bold shadow-sm uppercase tracking-wide"><RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} /> <span className="hidden md:inline">Actualizar</span></button>
+          </div>
         </header>
         
-        {/* MAIN VIEWS */}
-        {currentView === 'settings' ? (
-              <SettingsView 
-                        currentUser={currentUser} 
-                        currentTheme={theme} 
-                        onUpdateTheme={handleUpdateTheme}
-                        onLogout={() => { setCurrentUser(null); logAction(currentUser, 'LOGIN', 'Sistema', 'Cierre de sesión'); }}
-                     />
-        ) : currentView === 'reports' ? (
-              <ReportsView 
-                data={records} 
-                onRefreshData={refreshSystem} 
-              />
-        ) : currentView === 'expenses' ? (
-              <ExpensesView 
-                  expenses={filteredExpenses} 
-                  onExpensesUpdated={setExpenses}
-                  onViewDetail={(title, records) => setModalData({ isOpen: true, title, type: 'list', dataType: 'expense', records })}
-                  theme={theme}
-              />
-        ) : currentView === 'import' ? (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                     <div className="flex p-1 bg-white rounded-xl shadow-sm border border-slate-100 w-full md:w-fit overflow-x-auto">
-                        <button 
-                            onClick={() => setImportTab('process')}
-                            className={clsx(
-                                "flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap",
-                                importTab === 'process' ? `bg-${theme.primaryColor}-50 text-${theme.primaryColor}-700 shadow-sm` : "text-slate-500 hover:text-slate-700"
-                            )}
-                        >
-                            <Database size={16} /> Procesamiento ERP
-                        </button>
-                        <button 
-                            onClick={() => setImportTab('convert')}
-                            className={clsx(
-                                "flex-1 md:flex-none px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 whitespace-nowrap",
-                                importTab === 'convert' ? `bg-${theme.primaryColor}-50 text-${theme.primaryColor}-700 shadow-sm` : "text-slate-500 hover:text-slate-700"
-                            )}
-                        >
-                            <ArrowRightLeft size={16} /> Conversor
-                        </button>
-                     </div>
-
-                     {importTab === 'process' ? (
-                        <ImportView 
-                            files={files} 
-                            status={status} 
-                            onFileSelect={handleFileSelect} 
-                            onRemoveFile={(idx) => setFiles(prev => prev.filter((_, i) => i !== idx))} 
-                            onProcess={handleProcess}
-                            theme={theme}
-                            fleetDbCount={fleetDb.length}
-                            onDbUpload={handleDbSelect}
-                        />
-                     ) : (
-                        <ConverterView 
-                            convertFile={convertFile}
-                            isConverting={isConverting}
-                            onFileSelect={setConvertFile}
-                            onConvert={handleConversion}
-                            onClearFile={() => setConvertFile(null)}
-                            theme={theme}
-                        />
-                     )}
-                  </div>
-        ) : (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-12">
-                      
-                      {/* STATS & CHARTS - FULL WIDTH */}
-                      {filteredRecords.length > 0 ? (
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+            {currentView === 'settings' ? <SettingsView currentUser={currentUser} currentTheme={theme} onUpdateTheme={setTheme} onLogout={() => { setCurrentUser(null); logAction(currentUser, 'LOGIN', 'Sistema', 'Logout'); }} /> : 
+             currentView === 'reports' ? <ReportsView data={records} onRefreshData={refreshSystem} /> : 
+             currentView === 'expenses' ? <ExpensesView expenses={filteredExpenses} onExpensesUpdated={setExpenses} onViewDetail={(title, records) => setModalData({ isOpen: true, title, type: 'list', dataType: 'expense', records })} theme={theme} /> : 
+             currentView === 'import' ? (
+                <div className="space-y-6">
+                    <div className="flex bg-white p-1 rounded-lg shadow-polaris border border-slate-200 w-fit mb-6">
+                        <button onClick={() => setImportTab('process')} className={clsx("px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-2", importTab === 'process' ? "bg-slate-800 text-white shadow" : "text-slate-500 hover:text-slate-900")}> <Database size={14} /> Procesamiento </button>
+                        <button onClick={() => setImportTab('convert')} className={clsx("px-5 py-2 rounded-md text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-2", importTab === 'convert' ? "bg-slate-800 text-white shadow" : "text-slate-500 hover:text-slate-900")}> <ArrowRightLeft size={14} /> Conversor </button>
+                    </div>
+                    {importTab === 'process' ? <ImportView files={files} status={status} onFileSelect={(e) => e.target.files && setFiles(p => [...p, ...Array.from(e.target.files!)])} onRemoveFile={(idx) => setFiles(p => p.filter((_, i) => i !== idx))} onProcess={handleProcess} theme={theme} fleetDbCount={fleetDb.length} onDbUpload={handleDbSelect} /> : <ConverterView convertFile={convertFile} isConverting={isConverting} onFileSelect={setConvertFile} onConvert={handleConversion} onClearFile={() => setConvertFile(null)} theme={theme} />}
+                </div>
+            ) : (
+                <div className="space-y-8 pb-12">
+                    {filteredRecords.length > 0 ? (
                         <>
-                            <Stats data={filteredRecords} onCardDoubleClick={handleStatClick} />
-                            
-                            <Charts data={filteredRecords} onBarClick={handleChartClick} />
-                            
-                            <DataTable 
-                                data={filteredRecords} 
-                                onRowDoubleClick={(r) => setModalData({ isOpen: true, title: 'Detalle', type: 'detail', dataType: 'truck', singleRecord: r })} 
-                                onViewFile={handleViewFile}
-                                onDelete={triggerDeleteSelection}
-                            />
+                            <Stats data={filteredRecords} onCardDoubleClick={(type) => { let filtered = [...filteredRecords], title = ""; if(type==='total') title="General"; else if(type==='trucks') {title="Patentes"; filtered.sort((a,b)=>a.patente.localeCompare(b.patente));} else if(type==='owners') {title="Dueños"; filtered.sort((a,b)=>a.dueno.localeCompare(b.dueno));} setModalData({ isOpen: true, title, type: 'list', dataType: 'truck', records: filtered }); }} />
+                            <Charts data={filteredRecords} onBarClick={(owner) => setModalData({ isOpen: true, title: `Ops: ${owner}`, type: 'list', dataType: 'truck', records: filteredRecords.filter(r => r.dueno === owner) })} />
+                            <DataTable data={filteredRecords} onRowDoubleClick={(r) => setModalData({ isOpen: true, title: 'Detalle', type: 'detail', dataType: 'truck', singleRecord: r })} onViewFile={async (id) => { const f = await getFileById(id); if(f?.content) window.open(URL.createObjectURL(new Blob([new Uint8Array(atob(f.content as string).split('').map(c=>c.charCodeAt(0)))], {type: f.type})), '_blank'); }} onDelete={(ids) => { setRecordsToDelete(ids); setShowDeleteConfirm(true); }} />
                         </>
-                      ) : (
-                          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 border-dashed">
-                              <div className="p-4 bg-slate-50 rounded-full mb-4">
-                                  <Database className="text-slate-300" size={48} />
-                              </div>
-                              <h3 className="text-lg font-bold text-slate-700">Sin datos disponibles</h3>
-                              <p className="text-slate-500 mb-6 text-center max-w-md">
-                                  {dateFilter.start || dateFilter.end 
-                                    ? "No se encontraron movimientos en el rango de fechas seleccionado."
-                                    : "La base de datos está vacía. Dirígete a 'Importar Datos' para comenzar."
-                                  }
-                              </p>
-                              {!(dateFilter.start || dateFilter.end) && (
-                                  <button 
-                                      onClick={() => setCurrentView('import')}
-                                      className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm"
-                                  >
-                                      Ir a Importar Datos
-                                  </button>
-                              )}
-                          </div>
-                      )}
-                  </div>
-        )}
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-32 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 text-slate-400">
+                            <Database size={64} className="mb-4 opacity-20" /> <p className="text-lg font-bold text-slate-600">Sin datos disponibles</p> <button onClick={() => setCurrentView('import')} className="mt-4 px-6 py-2 bg-furlong-red text-white rounded-lg font-bold shadow-md hover:bg-red-700">Ir a Carga</button>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
       </main>
-      <DetailModal modalData={modalData} onClose={() => setModalData(prev => ({ ...prev, isOpen: false }))} />
       
-      {/* Global Clear Confirm */}
-      <ConfirmModal 
-        isOpen={showClearConfirm}
-        title="¿Borrar todos los registros?"
-        message="Esta acción eliminará todos los datos procesados de la tabla. Los archivos originales en el historial no se verán afectados."
-        confirmText="Sí, Borrar Todo"
-        onConfirm={handleClearRecords}
-        onClose={() => setShowClearConfirm(false)}
-      />
-
-      {/* Selected Items Delete Confirm */}
-      <ConfirmModal 
-        isOpen={showDeleteConfirm}
-        title="¿Eliminar registros seleccionados?"
-        message={`Estás a punto de borrar ${recordsToDelete.length} registros de la base de datos principal.`}
-        confirmText="Sí, Eliminar"
-        isDestructive
-        onConfirm={confirmDeleteSelection}
-        onClose={() => setShowDeleteConfirm(false)}
-      />
+      <DetailModal modalData={modalData} onClose={() => setModalData(p => ({ ...p, isOpen: false }))} />
+      <ConfirmModal isOpen={showClearConfirm} title="Limpiar Base" message="Se borrarán todos los registros." confirmText="Borrar" onConfirm={async () => { await clearRecords(currentUser!); setRecords([]); setShowClearConfirm(false); }} onClose={() => setShowClearConfirm(false)} />
+      <ConfirmModal isOpen={showDeleteConfirm} title="Eliminar Selección" message="Se borrarán los registros seleccionados." confirmText="Eliminar" isDestructive onConfirm={async () => { await deleteRecords(recordsToDelete, currentUser!); setRecords(p => p.filter(r => !recordsToDelete.includes(r.id))); setShowDeleteConfirm(false); }} onClose={() => setShowDeleteConfirm(false)} />
     </div>
   );
 }

@@ -77,7 +77,7 @@ const openDB = (): Promise<IDBDatabase> => {
         const userStore = db.createObjectStore(STORES.USERS, { keyPath: 'email' });
         userStore.add({
             id: 'admin-1',
-            email: 'admin@logisticaintegral.com.ar',
+            email: 'admin@transportefurlong.com.ar',
             password: 'admin', 
             name: 'Administrador Sistema',
             role: 'admin',

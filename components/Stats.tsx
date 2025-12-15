@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { DollarSign, Truck, Users, Activity } from 'lucide-react';
+import { DollarSign, Truck, Users, Activity, TrendingUp } from 'lucide-react';
 import { TruckRecord } from '../types';
 
 interface StatsProps {
@@ -14,80 +14,78 @@ export const Stats: React.FC<StatsProps> = ({ data, onCardDoubleClick }) => {
   const uniqueOwners = new Set(data.map(d => d.dueno)).size;
 
   const formatCurrency = (val: number) => {
-    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(val);
+    return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(val);
   };
 
-  const cardClass = "bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center justify-between cursor-pointer hover:shadow-md hover:border-blue-200 transition-all group relative overflow-hidden select-none h-full";
-  const clickHint = "absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 text-[10px]";
+  const cardBase = "bg-white rounded-xl shadow-polaris hover:shadow-polaris-hover transition-all duration-300 overflow-hidden relative group cursor-pointer border border-slate-200";
 
   return (
-    <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-6 mb-8">
+    <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       
       {/* Monto Total Card */}
-      <div 
-        className={cardClass} 
-        onDoubleClick={() => onCardDoubleClick?.('total')}
-        title="Doble click para ver detalle de todos los montos"
-      >
-        <div className={clickHint}>Doble Click</div>
-        <div className="flex-1 min-w-0 mr-4">
-          <p className="text-sm text-slate-500 font-medium truncate">Monto Total</p>
-          <p className="text-2xl font-bold text-slate-900 truncate">{formatCurrency(totalValue)}</p>
-          <p className="text-xs text-slate-400 mt-1 truncate">Total facturado</p>
-        </div>
-        <div className="p-3 bg-green-100 text-green-600 rounded-full group-hover:bg-green-600 group-hover:text-white transition-colors flex-shrink-0">
-          <DollarSign size={24} />
+      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('total')}>
+        <div className="h-1.5 w-full bg-green-500 absolute top-0 left-0"></div>
+        <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+                <div className="p-3 rounded-lg bg-green-50 text-green-600">
+                    <DollarSign size={24} />
+                </div>
+                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
+                    <TrendingUp size={12}/> Activo
+                </span>
+            </div>
+            <div>
+                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Monto Total</p>
+                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{formatCurrency(totalValue)}</h3>
+            </div>
         </div>
       </div>
 
       {/* Camiones Activos Card */}
-      <div 
-        className={cardClass} 
-        onDoubleClick={() => onCardDoubleClick?.('trucks')}
-        title="Doble click para ver detalle de camiones"
-      >
-        <div className={clickHint}>Doble Click</div>
-        <div className="flex-1 min-w-0 mr-4">
-          <p className="text-sm text-slate-500 font-medium truncate">Camiones Activos</p>
-          <p className="text-2xl font-bold text-slate-900 truncate">{uniqueTrucks}</p>
-          <p className="text-xs text-slate-400 mt-1 truncate">Patentes únicas detectadas</p>
-        </div>
-        <div className="p-3 bg-blue-100 text-blue-600 rounded-full group-hover:bg-blue-600 group-hover:text-white transition-colors flex-shrink-0">
-          <Truck size={24} />
-        </div>
+      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('trucks')}>
+         <div className="h-1.5 w-full bg-furlong-red absolute top-0 left-0"></div>
+         <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+                <div className="p-3 rounded-lg bg-red-50 text-furlong-red">
+                    <Truck size={24} />
+                </div>
+            </div>
+            <div>
+                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Flota Activa</p>
+                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{uniqueTrucks} <span className="text-sm font-medium text-slate-400">unidades</span></h3>
+            </div>
+         </div>
       </div>
 
       {/* Dueños Card */}
-      <div 
-        className={cardClass} 
-        onDoubleClick={() => onCardDoubleClick?.('owners')}
-        title="Doble click para ver lista de dueños"
-      >
-        <div className={clickHint}>Doble Click</div>
-        <div className="flex-1 min-w-0 mr-4">
-          <p className="text-sm text-slate-500 font-medium truncate">Dueños</p>
-          <p className="text-2xl font-bold text-slate-900 truncate">{uniqueOwners}</p>
-          <p className="text-xs text-slate-400 mt-1 truncate">Proveedores distintos</p>
-        </div>
-        <div className="p-3 bg-purple-100 text-purple-600 rounded-full group-hover:bg-purple-600 group-hover:text-white transition-colors flex-shrink-0">
-          <Users size={24} />
+      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('owners')}>
+        <div className="h-1.5 w-full bg-blue-500 absolute top-0 left-0"></div>
+        <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+                <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
+                    <Users size={24} />
+                </div>
+            </div>
+            <div>
+                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Proveedores</p>
+                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{uniqueOwners} <span className="text-sm font-medium text-slate-400">titulares</span></h3>
+            </div>
         </div>
       </div>
 
       {/* Operaciones Card */}
-      <div 
-        className={cardClass} 
-        onDoubleClick={() => onCardDoubleClick?.('ops')}
-        title="Doble click para ver todas las operaciones"
-      >
-        <div className={clickHint}>Doble Click</div>
-        <div className="flex-1 min-w-0 mr-4">
-          <p className="text-sm text-slate-500 font-medium truncate">Operaciones</p>
-          <p className="text-2xl font-bold text-slate-900 truncate">{data.length}</p>
-          <p className="text-xs text-slate-400 mt-1 truncate">Registros procesados</p>
-        </div>
-        <div className="p-3 bg-orange-100 text-orange-600 rounded-full group-hover:bg-orange-600 group-hover:text-white transition-colors flex-shrink-0">
-          <Activity size={24} />
+      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('ops')}>
+        <div className="h-1.5 w-full bg-purple-500 absolute top-0 left-0"></div>
+        <div className="p-6">
+            <div className="flex justify-between items-start mb-4">
+                <div className="p-3 rounded-lg bg-purple-50 text-purple-600">
+                    <Activity size={24} />
+                </div>
+            </div>
+            <div>
+                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Operaciones</p>
+                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{data.length} <span className="text-sm font-medium text-slate-400">registros</span></h3>
+            </div>
         </div>
       </div>
     </div>

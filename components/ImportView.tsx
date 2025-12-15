@@ -1,7 +1,7 @@
 
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileText, FileSpreadsheet, X, Loader2, AlertCircle, CheckCircle2, Database, Clock } from 'lucide-react';
-import { ThemeSettings, ProcessingStatus, FleetRecord } from '../types';
+import { UploadCloud, FileText, FileSpreadsheet, X, Loader2, AlertCircle, CheckCircle2, Database, Clock, ArrowRight } from 'lucide-react';
+import { ThemeSettings, ProcessingStatus } from '../types';
 import clsx from 'clsx';
 
 interface ImportViewProps {
@@ -11,7 +11,6 @@ interface ImportViewProps {
     onRemoveFile: (index: number) => void;
     onProcess: () => void;
     theme: ThemeSettings;
-    // New props for Fleet DB
     fleetDbCount: number;
     onDbUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
@@ -22,7 +21,6 @@ export const ImportView: React.FC<ImportViewProps> = ({
     onFileSelect, 
     onRemoveFile, 
     onProcess, 
-    theme,
     fleetDbCount,
     onDbUpload
 }) => {
@@ -30,206 +28,172 @@ export const ImportView: React.FC<ImportViewProps> = ({
     const dbInputRef = useRef<HTMLInputElement>(null);
     const [isReading, setIsReading] = useState(false);
 
-    // Wrapper to handle reading state
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             setIsReading(true);
-            // Simulate a small delay for UI feedback or wait for file reading logic if it was async in parent
             await new Promise(resolve => setTimeout(resolve, 600)); 
             onFileSelect(e);
             setIsReading(false);
         }
     };
 
-    const handleDragOver = (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-    };
-
     const handleDrop = async (e: React.DragEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
+        e.preventDefault(); e.stopPropagation();
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             setIsReading(true);
             await new Promise(resolve => setTimeout(resolve, 600));
-            const event = {
-                target: { files: e.dataTransfer.files }
-            } as unknown as React.ChangeEvent<HTMLInputElement>;
+            const event = { target: { files: e.dataTransfer.files } } as unknown as React.ChangeEvent<HTMLInputElement>;
             onFileSelect(event);
             setIsReading(false);
         }
     };
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {/* LEFT COLUMN: DAILY FILES */}
-            <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                <h3 className={`text-lg font-bold text-slate-800 mb-4 flex items-center gap-2`}>
-                    <UploadCloud size={20} className={`text-${theme.primaryColor}-500`}/>
-                    Carga de Documentos (PDF / Excel)
-                </h3>
-                
-                <div 
-                    className={`relative border-2 border-dashed border-slate-300 rounded-xl p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-${theme.primaryColor}-50 transition-colors cursor-pointer min-h-[250px]`}
-                    onClick={() => !isReading && !status.isProcessing && fileInputRef.current?.click()}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                >
-                    <input 
-                        type="file" 
-                        multiple 
-                        ref={fileInputRef} 
-                        className="hidden" 
-                        accept=".pdf,.xlsx,.xls,.csv"
-                        onChange={handleFileChange}
-                    />
-
-                    {isReading ? (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm rounded-xl z-10">
-                            <Clock size={48} className={`text-${theme.primaryColor}-500 animate-pulse mb-4`} />
-                            <p className="text-lg font-bold text-slate-700">Leyendo archivos...</p>
-                            <p className="text-sm text-slate-500">Por favor espere un momento</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className={`p-4 bg-${theme.primaryColor}-100 text-${theme.primaryColor}-600 rounded-full mb-4 group-hover:scale-110 transition-transform`}>
-                                <UploadCloud size={32} />
-                            </div>
-                            <p className="text-lg text-slate-700 font-medium mb-2 text-center">
-                                Arrastra tus archivos aquí<br/>o haz clic para explorar
-                            </p>
-                            <p className="text-slate-400 text-sm">Soporta Resúmenes Bancarios, Facturas y Planillas</p>
-                        </>
-                    )}
+            {/* LEFT COLUMN: UPLOAD ZONE */}
+            <div className="lg:col-span-2 bg-white rounded-xl shadow-polaris border border-slate-200 overflow-hidden">
+                <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <UploadCloud size={20} className="text-furlong-red"/>
+                        Carga de Documentación
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">Sube PDFs de resumen o planillas Excel de control.</p>
                 </div>
+                
+                <div className="p-6">
+                    <div 
+                        className="relative border-2 border-dashed border-slate-300 rounded-xl p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-red-50 hover:border-furlong-red/30 transition-all cursor-pointer min-h-[280px] group"
+                        onClick={() => !isReading && !status.isProcessing && fileInputRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDrop={handleDrop}
+                    >
+                        <input type="file" multiple ref={fileInputRef} className="hidden" accept=".pdf,.xlsx,.xls,.csv" onChange={handleFileChange} />
 
-                {files.length > 0 && (
-                    <div className="mt-6 border-t border-slate-100 pt-6">
-                        <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">
-                            Archivos listos para procesar ({files.length})
-                        </p>
-                        <div className="grid grid-cols-1 gap-2 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                            {files.map((file, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        {file.name.endsWith('.pdf') ? (
-                                            <FileText className="text-red-500 flex-shrink-0" size={20} />
-                                        ) : (
-                                            <FileSpreadsheet className="text-green-600 flex-shrink-0" size={20} />
-                                        )}
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-medium truncate text-slate-700">{file.name}</span>
-                                            <span className="text-[10px] text-slate-400">{(file.size / 1024).toFixed(1)} KB</span>
-                                        </div>
-                                    </div>
-                                    <button 
-                                        onClick={() => onRemoveFile(idx)} 
-                                        disabled={status.isProcessing}
-                                        className="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-slate-50 transition-colors disabled:opacity-50"
-                                    >
-                                        <X size={16} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        <button 
-                            onClick={onProcess}
-                            disabled={status.isProcessing || isReading}
-                            className={clsx(
-                                "w-full flex items-center justify-center gap-3 px-6 py-4 rounded-xl font-bold text-white text-lg transition-all shadow-md",
-                                (status.isProcessing || isReading) ? "bg-slate-400 cursor-not-allowed" : `bg-${theme.primaryColor}-600 hover:bg-${theme.primaryColor}-700 hover:shadow-${theme.primaryColor}-200`
-                            )}
-                        >
-                            {status.isProcessing ? (
-                                <>
-                                    <Loader2 className="animate-spin" size={24} />
-                                    <span>Procesando archivo {status.processedCount! + 1} de {status.totalCount}...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <span>Iniciar Procesamiento Inteligente</span>
-                                    {theme.processingMode === 'free' && <span className="text-xs bg-white/20 px-2 py-0.5 rounded font-normal">Modo Gratuito</span>}
-                                </>
-                            )}
-                        </button>
-                        
-                        {status.isProcessing && (
-                            <div className="w-full bg-slate-100 rounded-full h-2.5 mt-4 overflow-hidden">
-                                <div 
-                                    className={`bg-${theme.primaryColor}-600 h-2.5 rounded-full transition-all duration-300 relative`} 
-                                    style={{ width: `${(status.processedCount! / status.totalCount!) * 100}%` }}
-                                >
-                                    <div className="absolute inset-0 bg-white/30 animate-pulse w-full h-full"></div>
-                                </div>
+                        {isReading ? (
+                            <div className="flex flex-col items-center animate-pulse">
+                                <Clock size={48} className="text-furlong-red mb-4" />
+                                <p className="font-bold text-slate-700">Analizando archivos...</p>
                             </div>
+                        ) : (
+                            <>
+                                <div className="p-5 bg-white rounded-full shadow-sm mb-4 group-hover:scale-110 transition-transform border border-slate-100">
+                                    <UploadCloud size={32} className="text-furlong-red" />
+                                </div>
+                                <p className="text-lg text-slate-800 font-bold mb-1">Haz clic o arrastra archivos aquí</p>
+                                <p className="text-slate-500 text-sm text-center max-w-sm">
+                                    Soporta procesamiento inteligente de PDFs bancarios y planillas de control logístico.
+                                </p>
+                            </>
                         )}
                     </div>
-                )}
 
-                {status.error && (
-                    <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-xl flex items-start gap-3 border border-red-100 animate-in slide-in-from-top-2">
-                        <AlertCircle size={20} className="flex-shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                            <p className="font-bold text-sm">Se encontraron errores durante el proceso:</p>
-                            <p className="text-sm mt-1 opacity-90 break-all">{status.error}</p>
+                    {files.length > 0 && (
+                        <div className="mt-8">
+                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Cola de Procesamiento ({files.length})</h4>
+                            <div className="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2">
+                                {files.map((file, idx) => (
+                                    <div key={idx} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg shadow-sm hover:border-slate-300 transition-colors">
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            {file.name.endsWith('.pdf') ? (
+                                                <FileText className="text-red-500 flex-shrink-0" size={20} />
+                                            ) : (
+                                                <FileSpreadsheet className="text-green-600 flex-shrink-0" size={20} />
+                                            )}
+                                            <span className="text-sm font-medium text-slate-700 truncate">{file.name}</span>
+                                        </div>
+                                        <button onClick={() => onRemoveFile(idx)} disabled={status.isProcessing} className="text-slate-400 hover:text-red-500 p-1.5 hover:bg-slate-100 rounded-md transition-colors">
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            
+                            <button 
+                                onClick={onProcess}
+                                disabled={status.isProcessing || isReading}
+                                className={clsx(
+                                    "w-full flex items-center justify-center gap-2 px-6 py-4 rounded-lg font-bold text-white text-lg transition-all shadow-md",
+                                    (status.isProcessing || isReading) ? "bg-slate-400 cursor-not-allowed" : "bg-furlong-red hover:bg-red-700 hover:shadow-lg"
+                                )}
+                            >
+                                {status.isProcessing ? (
+                                    <> <Loader2 className="animate-spin" size={22} /> <span>Procesando {status.processedCount}/{status.totalCount}</span> </>
+                                ) : (
+                                    <> <span>Iniciar Procesamiento</span> <ArrowRight size={20} /> </>
+                                )}
+                            </button>
+                            
+                            {status.isProcessing && (
+                                <div className="w-full bg-slate-100 rounded-full h-1.5 mt-4 overflow-hidden">
+                                    <div className="bg-furlong-red h-full transition-all duration-300" style={{ width: `${(status.processedCount! / status.totalCount!) * 100}%` }}></div>
+                                </div>
+                            )}
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {status.success && !status.error && (
-                    <div className="mt-4 p-4 bg-green-50 text-green-700 rounded-xl flex items-center gap-3 border border-green-100 animate-in zoom-in">
-                        <div className="p-2 bg-green-100 rounded-full"><CheckCircle2 size={20} /></div>
-                        <div>
-                            <p className="font-bold">¡Proceso completado!</p>
-                            <p className="text-sm opacity-90">Los datos han sido unificados y guardados.</p>
+                    {status.error && (
+                        <div className="mt-6 p-4 bg-red-50 border border-red-100 rounded-lg flex gap-3 text-red-700 text-sm">
+                            <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                            <div><span className="font-bold">Error:</span> {status.error}</div>
                         </div>
-                    </div>
-                )}
+                    )}
+                     {status.success && !status.error && (
+                        <div className="mt-6 p-4 bg-green-50 border border-green-100 rounded-lg flex gap-3 text-green-700 text-sm items-center">
+                            <CheckCircle2 size={18} />
+                            <span className="font-bold">Procesamiento completado con éxito.</span>
+                        </div>
+                    )}
+                </div>
             </div>
 
-            {/* RIGHT COLUMN: MASTER DB */}
+            {/* RIGHT COLUMN: MASTER DB INFO */}
             <div className="lg:col-span-1 space-y-6">
-                <div className="bg-slate-800 text-white p-6 rounded-xl shadow-md border border-slate-700 relative overflow-hidden group">
-                    <div className="absolute -right-4 -top-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                        <Database size={120} />
+                <div className="bg-[#1F2937] text-white p-6 rounded-xl shadow-lg border border-slate-700 relative overflow-hidden group">
+                    <div className="absolute -right-6 -top-6 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <Database size={140} />
                     </div>
                     
-                    <h3 className="text-lg font-bold mb-2 flex items-center gap-2 relative z-10">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2 relative z-10">
                         <Database size={20} className="text-green-400"/>
-                        Base de Datos Maestra
+                        Base Maestra
                     </h3>
-                    <p className="text-slate-300 text-sm mb-6 relative z-10">
-                        Carga aquí tu archivo Excel maestro con la relación Patente - Dueño - TAG para mejorar la identificación.
-                    </p>
 
-                    <div className="bg-slate-700/50 rounded-lg p-4 mb-4 border border-slate-600 relative z-10">
+                    <div className="bg-white/10 rounded-lg p-4 mb-6 border border-white/5 relative z-10 backdrop-blur-sm">
                         <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-bold text-slate-400 uppercase">Estado Actual</span>
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${fleetDbCount > 0 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                                {fleetDbCount > 0 ? 'ACTIVA' : 'VACÍA'}
+                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">Registros</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${fleetDbCount > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                                {fleetDbCount > 0 ? 'ONLINE' : 'OFFLINE'}
                             </span>
                         </div>
-                        <p className="text-2xl font-bold text-white">{fleetDbCount}</p>
-                        <p className="text-xs text-slate-400">Camiones registrados</p>
+                        <p className="text-3xl font-bold text-white tracking-tight">{fleetDbCount}</p>
+                        <p className="text-xs text-slate-400 mt-1">Camiones identificados</p>
                     </div>
 
                     <button 
                         onClick={() => dbInputRef.current?.click()}
-                        className="w-full py-3 bg-white text-slate-900 rounded-lg font-bold hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 relative z-10"
+                        className="w-full py-3 bg-white text-[#1F2937] rounded-lg font-bold hover:bg-slate-100 transition-colors flex items-center justify-center gap-2 text-sm relative z-10"
                     >
-                        <FileSpreadsheet size={18} /> Actualizar Base
+                        <FileSpreadsheet size={16} /> Actualizar Base
                     </button>
                     <input type="file" ref={dbInputRef} className="hidden" accept=".xlsx,.xls,.csv" onChange={onDbUpload} />
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
-                    <h4 className="font-bold text-slate-700 mb-2">Instrucciones</h4>
-                    <ul className="text-sm text-slate-500 space-y-2 list-disc pl-4">
-                        <li>El Excel debe contener columnas como: <b>Patente, Dueño, TAG, Equipo</b>.</li>
-                        <li>El sistema usa "Patente" o "TAG" para cruzar información.</li>
-                        <li>Al subir archivos diarios, el sistema consultará esta base automáticamente.</li>
+                <div className="bg-white p-6 rounded-xl shadow-polaris border border-slate-200">
+                    <h4 className="font-bold text-slate-800 mb-3 text-sm">Guía Rápida</h4>
+                    <ul className="text-xs text-slate-500 space-y-3">
+                        <li className="flex gap-2">
+                            <div className="w-1.5 h-1.5 bg-furlong-red rounded-full mt-1.5 flex-shrink-0"></div>
+                            <span>Sube archivos <b>PDF</b> o <b>Excel</b> para extraer datos automáticamente.</span>
+                        </li>
+                        <li className="flex gap-2">
+                            <div className="w-1.5 h-1.5 bg-furlong-red rounded-full mt-1.5 flex-shrink-0"></div>
+                            <span>La IA identificará patentes, fechas y montos.</span>
+                        </li>
+                        <li className="flex gap-2">
+                            <div className="w-1.5 h-1.5 bg-furlong-red rounded-full mt-1.5 flex-shrink-0"></div>
+                            <span>Mantén la <b>Base Maestra</b> actualizada para mejorar el cruce de datos.</span>
+                        </li>
                     </ul>
                 </div>
             </div>

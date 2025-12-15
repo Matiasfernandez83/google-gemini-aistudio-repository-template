@@ -4,14 +4,68 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ERP Logística Integral</title>
+    <title>TAGs-Transporte Furlong</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              furlong: {
+                red: '#E30613', // Official Furlong Red
+                dark: '#111111', // Deep Black/Gray
+                gray: '#333333', // Corporate Gray
+                light: '#F8F9FA' // Light Background
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Montserrat', 'sans-serif'],
+            },
+            boxShadow: {
+              'polaris': '0 0.0625rem 0.125rem rgba(0, 0, 0, 0.05), 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.1)',
+              'polaris-hover': '0 0.25rem 0.5rem rgba(0, 0, 0, 0.08), 0 0.125rem 0.25rem rgba(0, 0, 0, 0.1)',
+            }
+          }
+        }
+      }
+    </script>
     <style>
       body {
         font-family: 'Inter', sans-serif;
-        background-color: #f3f4f6;
+        background-color: #F8F9FA;
+        color: #1F2937;
       }
+      h1, h2, h3, h4, h5, h6, .brand-font {
+        font-family: 'Montserrat', sans-serif;
+      }
+      
+      /* Modern Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+
+      /* Polaris-like Card Base */
+      .card-base {
+        background: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        transition: all 0.2s ease-in-out;
+      }
+
       #app-loader {
         position: fixed;
         inset: 0;
@@ -19,19 +73,20 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: #f8fafc;
+        background: #F8F9FA;
         z-index: 9999;
         transition: opacity 0.5s;
       }
       .spinner {
-        width: 40px;
-        height: 40px;
-        border: 4px solid #e2e8f0;
-        border-top: 4px solid #3b82f6;
+        width: 48px;
+        height: 48px;
+        border: 4px solid #e5e7eb;
+        border-top: 4px solid #E30613;
         border-radius: 50%;
-        animation: spin 1s linear infinite;
+        animation: spin 0.8s linear infinite;
       }
       @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+      
       #global-error {
         display: none;
         position: fixed;
@@ -43,23 +98,15 @@
       }
     </style>
     <script>
-      // Safe Polyfill
       window.process = window.process || { env: {} };
       window.global = window;
-      
-      // Global Error Trap
       window.onerror = function(msg, url, line, col, error) {
-        // Ignorar errores de red de scripts no esenciales para evitar pantalla roja
-        if (msg.includes('Failed to fetch') || msg.includes('Importing a module script failed')) {
-            console.warn('Network error detected, app will try to use fallbacks.');
-            return false;
-        }
-
+        if (msg.includes('Failed to fetch') || msg.includes('Importing a module script failed')) return false;
         var errDiv = document.getElementById('global-error');
         var loader = document.getElementById('app-loader');
         if (errDiv) {
             errDiv.style.display = 'block';
-            errDiv.innerHTML = '<h1>Error Crítico de Carga</h1><pre>' + msg + '\n' + (error ? error.stack : '') + '</pre><button onclick="window.location.reload()" style="padding:10px; background:#333; color:#fff; margin-top:20px; cursor:pointer;">Recargar Página</button>';
+            errDiv.innerHTML = '<h1>Error Crítico</h1><pre>' + msg + '</pre><button onclick="window.location.reload()" style="padding:10px; background:#E30613; color:#fff; border:none; border-radius:4px; margin-top:20px; cursor:pointer;">Recargar Sistema</button>';
         }
         if (loader) loader.style.display = 'none';
         return false;
@@ -87,7 +134,7 @@
   <body>
     <div id="app-loader">
         <div class="spinner"></div>
-        <p style="margin-top: 20px; color: #64748b; font-weight: 500;">Cargando Sistema...</p>
+        <p style="margin-top: 24px; color: #111; font-weight: 700; font-family: 'Montserrat', sans-serif; letter-spacing: -0.5px;">FURLONG LOGÍSTICA</p>
     </div>
     <div id="global-error"></div>
     <div id="root"></div>

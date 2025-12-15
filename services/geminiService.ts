@@ -164,14 +164,26 @@ export const processCardExpenses = async (
     const prompt = `
         Analiza este resumen de tarjeta de crédito (PDF/Excel) de Argentina.
         
-        OBJETIVO 1: Extraer METADATA DEL RESUMEN (Encabezado).
-        Busca y extrae:
-        - "banco": Nombre del banco (ej: Galicia, Santander, BBVA, Visa, Amex, Mastercard).
-        - "titular": Nombre de la persona/empresa titular de la cuenta.
-        - "periodo": El rango de fechas del resumen (ej: "Dic 23", "01/01/24 - 31/01/24"). Si no hay rango, usa el mes.
-        - "fechaVencimiento": Fecha límite de pago en formato YYYY-MM-DD.
-        - "totalResumen": El monto TOTAL A PAGAR (Saldo total) del resumen completo (no solo peajes, el total de la deuda).
-        
+        OBJETIVO 1: Extraer METADATA CRÍTICA DEL RESUMEN (Encabezado).
+        Debes extraer con ALTA PRECISIÓN los siguientes 5 campos:
+
+        1. "banco": Nombre del banco emisor (ej: Galicia, Santander, BBVA, Visa, Amex, Mastercard).
+
+        2. "titular": Nombre de la persona o empresa dueña de la cuenta.
+           - REGLA: Busca etiquetas explícitas como "Titular", "Cliente", "Señor/a", "A nombre de".
+           - INFERENCIA: Si no hay etiqueta, busca el nombre/razón social destacado en el encabezado superior (usualmente izquierda o derecha, junto a la dirección).
+
+        3. "periodo": El rango de fechas del resumen (ej: "Dic 23", "01/01/24 - 31/01/24"). Si no hay rango, usa el mes de cierre.
+
+        4. "fechaVencimiento": La FECHA LÍMITE DE PAGO ACTUAL (Formato YYYY-MM-DD).
+           - REGLA: Busca "Vencimiento", "Vence", "Vto. Actual".
+           - IMPORTANTE: No confundir con "Próximo Vencimiento" o "Vencimiento resumen anterior".
+
+        5. "totalResumen": El MONTO FINAL TOTAL A PAGAR (Saldo Total).
+           - REGLA: Busca etiquetas como "Total a Pagar", "Saldo Total", "Saldo al cierre", "Importe a abonar", "Saldo actual".
+           - CRÍTICO: Debes tomar el monto MAYOR que represente la deuda total del periodo.
+           - EXCLUSIÓN: Ignora absolutamente "Pago Mínimo", "Saldo Anterior" o "Pago parcial".
+
         OBJETIVO 2: Extraer ITEMS DE PEAJES Y AUTOPISTAS.
         Filtra las filas usando estas palabras clave: ${keywords.join(', ')}.
         - EXCLUYE gastos en dólares o de países limítrofes (Chile, Uruguay, Brasil).

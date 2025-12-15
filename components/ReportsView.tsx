@@ -109,7 +109,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ data, onRefreshData })
             const ws = XLSX.utils.json_to_sheet(exportData);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Reporte Completo");
-            XLSX.writeFile(wb, `ERP_Integral_Completo_${new Date().toISOString().slice(0,10)}.xlsx`);
+            XLSX.writeFile(wb, `TAGs_Transporte_Furlong_Completo_${new Date().toISOString().slice(0,10)}.xlsx`);
         } catch (e) {
             alert('Error al generar el reporte');
         }
