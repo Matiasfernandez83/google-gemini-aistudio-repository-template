@@ -1,5 +1,5 @@
 
-import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
+import { TruckRecord, ExpenseRecord, CardStatement, ProcessedStatementResult } from "../types";
 import { GoogleGenAI, Type } from "@google/genai";
 
 // Declaración local por seguridad
@@ -17,11 +17,11 @@ const getResponseSchema = () => ({
         patente: { type: Type.STRING, description: "La patente o matrícula. Si no es clara, usar 'PENDIENTE'." },
         tag: { type: Type.STRING, description: "El número de TAG o dispositivo." },
         dueno: { type: Type.STRING, description: "Nombre del propietario. Si no figura en la tabla, usar 'Desconocido'." },
-        valor: { type: Type.NUMBER, description: "El valor monetario o monto." },
+        valor: { type: Type.NUMBER, description: "El valor monetario o monto numérico." },
         concepto: { type: Type.STRING, description: "Descripción del ítem (peaje, fecha, lugar)." },
         fecha: { type: Type.STRING, description: "Fecha (YYYY-MM-DD)." }
       },
-      required: ["valor"], // Se reducen los requerimientos para evitar fallos si falta info no esencial
+      required: ["valor"], 
     },
 });
 
@@ -57,7 +57,6 @@ const cleanAndParseJSON = (text: string): any => {
 
 // --- VALIDATION HELPER ROBUST ---
 const getApiKey = (): string => {
-    // 1. Prioridad: Variable inyectada por Vite en build time (Más estable en producción)
     try {
         // @ts-ignore
         if (typeof __API_KEY__ !== 'undefined' && __API_KEY__ && __API_KEY__.trim() !== '') {
@@ -65,20 +64,14 @@ const getApiKey = (): string => {
         }
     } catch (e) {}
 
-    // 2. Prioridad: import.meta.env (Estándar Vite) - CON CHEQUEO DEFENSIVO
     try {
-        // Verificamos explícitamente que import.meta y import.meta.env existan antes de acceder
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && import.meta.env) {
             if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
             if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
         }
-    } catch (e) {
-        // Ignoramos errores de acceso aquí para probar el siguiente método
-        console.warn("Error accediendo a import.meta.env", e);
-    }
+    } catch (e) {}
 
-    // 3. Prioridad: process.env (Fallback para algunos entornos)
     try {
         // @ts-ignore
         if (typeof process !== 'undefined' && process.env) {
@@ -89,9 +82,8 @@ const getApiKey = (): string => {
         }
     } catch (e) {}
 
-    // Si llegamos aquí, no hay llave
-    console.error("API Key no encontrada en ninguna fuente (__API_KEY__, import.meta.env, process.env)");
-    throw new Error("FALTA API KEY: Verifica que tu archivo .env tenga VITE_API_KEY=... y reinicia la terminal.");
+    console.error("API Key no encontrada.");
+    throw new Error("FALTA API KEY: Verifica tu configuración.");
 };
 
 // --- FALLBACK METHOD ---
@@ -138,23 +130,33 @@ export const processDocuments = async (
 ): Promise<TruckRecord[]> => {
   let lastError: any;
   const apiKey = getApiKey();
-
   const schema = getResponseSchema();
-  // Prompt mejorado para ser más permisivo y no fallar si faltan columnas como "Dueño"
-  const prompt = `Actúa como un sistema experto de ERP logístico. Analiza el documento (PDF/Imagen/Texto). 
-  Busca tablas de movimientos, viajes, peajes o gastos.
+
+  const prompt = `Analiza el documento como un experto logístico.
+  Objetivo: Extraer filas de tablas de movimientos, viajes o peajes.
+
+  IMPORTANTE - LECTURA DE FACTURAS AGRUPADAS (Ej: Autopistas, CEAMSE):
+  En muchas facturas, el número de TAG (ej: SI9099565380) aparece en una línea SOLA (sin monto), y debajo aparecen las filas de peajes/pasadas con sus importes.
   
-  Extrae la siguiente información por cada fila detectada:
-  - Patente (Dominio/Matrícula).
-  - TAG (Dispositivo).
-  - Dueño (Transportista). Si no está explícito en la fila, usa "Desconocido".
-  - Valor (Monto/Importe). Es obligatorio.
-  - Concepto (Lugar/Peaje/Detalle).
+  REGLA DE CONTEXTO:
+  1. Si ves un código alfanumérico largo (TAG) en una línea sin valor monetario, GUÁRDALO como "Tag Actual".
+  2. Lee las líneas siguientes que tienen descripción (ej: "BUEN AYRE", "PASADAS") y MONTO.
+  3. A esas líneas de monto, ASÍGNALES el "Tag Actual" que leíste arriba.
+  4. Repite esto hasta que encuentres un nuevo TAG.
+  
+  INTELIGENCIA DEDUCTIVA GENERAL:
+  - Columna con formato monetario ($1.000, 1000.00) -> ES EL "VALOR".
+  - Columna con formato fecha (DD/MM/YYYY o YYYY-MM-DD) -> ES LA "FECHA".
+  
+  Mapeo de Campos Requerido:
+  - Patente (Si no está clara, pon "PENDIENTE").
+  - Dueño (Si falta, pon "Desconocido").
+  - Valor (OBLIGATORIO: Debe ser numérico).
+  - Concepto (Descripción del peaje/pasada).
+  - Tag (El dispositivo asociado a este cobro).
   - Fecha.
   
-  Si la tabla tiene datos pero falta el "Dueño", extráelos igual usando "Desconocido".
-  Si la patente no se lee bien, usa "PENDIENTE".
-  Devuelve todos los registros encontrados en un array JSON.`;
+  Devuelve un Array JSON plano con todas las transacciones encontradas (uniendo el Tag padre con sus filas hijas).`;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -168,7 +170,14 @@ export const processDocuments = async (
                 config: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
             });
             textResult = response.text || "[]";
-        } catch (e) {
+        } catch (e: any) {
+            // Manejo específico de error 429 (Rate Limit)
+            if (e.message?.includes('429') || e.toString().includes('429') || e.status === 429) {
+                console.warn(`Límite de API (429) detectado. Esperando ${10 * attempt} segundos...`);
+                await wait(10000 * attempt); // Espera exponencial: 10s, 20s, 30s
+                if (attempt === retries) throw new Error("Servidor saturado (429). Intente subir menos archivos a la vez.");
+                continue; // Reintentar loop
+            }
             console.warn("SDK Error, using fallback:", e);
             textResult = await generateContentFallback(apiKey, prompt, contents, schema);
         }
@@ -178,7 +187,6 @@ export const processDocuments = async (
 
         return data.map((item: any, index: number) => ({
             ...item,
-            // Valores por defecto robustos
             patente: item.patente || 'PENDIENTE',
             dueno: item.dueno || 'Desconocido',
             concepto: item.concepto || 'Varios',
@@ -187,18 +195,18 @@ export const processDocuments = async (
         }));
       } catch (error: any) {
         lastError = error;
-        if (attempt < retries) await wait(attempt * 2000);
+        // Si el error es 429 en el fallback también esperamos
+        if (error.message?.includes('429') || error.toString().includes('429')) {
+             await wait(10000 * attempt);
+        } else {
+             if (attempt < retries) await wait(attempt * 2000);
+        }
       }
   }
   throw new Error(`Error procesando documento: ${lastError?.message || 'Error desconocido'}`);
 };
 
 // --- NEW SERVICE: CREDIT CARD EXPENSES (ENHANCED) ---
-
-interface ProcessedStatementResult {
-    metadata: Omit<CardStatement, 'id' | 'sourceFileId' | 'timestamp'>;
-    items: Omit<ExpenseRecord, 'id' | 'statementId' | 'sourceFileId' | 'sourceFileName'>[];
-}
 
 export const processCardExpenses = async (
     contents: { mimeType: string; data: string }[],
@@ -207,41 +215,25 @@ export const processCardExpenses = async (
     let lastError: any;
     const apiKey = getApiKey();
     
-    const keywords = [
-        "peaje", "telepeaje", "telepase", "autopista", "ruta", "acceso", "corredor", 
-        "vial", "camino", "autovia", "concesionaria", "tasa", "tariff", "cabina", "estacion",
-        "ausol", "autopistas del sol", "ausa", "autopistas urbanas", "aubasa", "buenos aires",
-        "cvsa", "corredores viales", "caminos de las sierras", "caminos del rio uruguay", "rio uruguay",
-        "cruz del sur", "accesos norte", "acceso oeste", "grupo concesionario", "autovia del mar", 
-        "riccheri", "illia", "perito moreno", "7 lagos", "andes", "litoral", "gco", "oeste",
-        "mercadopago*telepase", "mp*telepase", "mercado pago telepase", "servicios viales", 
-        "cv1", "cv2", "cv3", "cv4", "cv5", "cv 1", "cv 2", "cv 3", "cv 4", "cv 5",
-        "a.u.s.a.", "a.u.s.o.l.", "g.c.o.", "caminos del valle", "yyp", "caminos", "cf", "cab"
-    ];
-
+    // Prompt reforzado para deducción inteligente
     const prompt = `
-        Analiza exhaustivamente este resumen de tarjeta (PDF/Excel) para detectar GASTOS DE PEAJE Y TELEPASE.
+        Analiza este documento (Resumen Tarjeta/Excel) buscando GASTOS VIALES (Peajes, Telepase, Rutas).
         
-        OBJETIVO 1: METADATA
-        Extrae: "banco", "titular", "periodo", "fechaVencimiento" (YYYY-MM-DD), "totalResumen" (Saldo Final).
+        INSTRUCCIONES DE "LECTURA INTELIGENTE":
+        1. No busques palabras exactas. Busca patrones.
+        2. Si ves items repetitivos con montos pequeños, son PEAJES.
+        3. Si ves "MERPAGO" o "MP", revisa si parece un servicio vial.
+        4. Si el concepto es ilegible pero la categoría dice "Vial" o "Servicios", inclúyelo.
+        
+        METADATA (Cabecera):
+        - Busca el Banco (Galicia, BBVA, Santander). Si no está, busca logos o textos legales.
+        - Busca la fecha de Vencimiento.
+        - Busca el "Total a Pagar" o "Saldo Nuevo".
 
-        OBJETIVO 2: ITEMS DE PEAJE (Detección Agresiva)
-        Tu prioridad absoluta es listar CADA movimiento que parezca un peaje o servicio vial.
+        ITEMS (Detalle):
+        - Extrae fecha, concepto y monto de cada peaje/telepase encontrado.
         
-        INSTRUCCIONES DE BÚSQUEDA:
-        1. Busca en columna 'Concepto' o 'Detalle' las palabras clave: ${keywords.join(', ')}.
-        2. IMPORTANTE: A veces el concepto es críptico (ej: "CVSA", "GCO SA", "AUSA", "YYP"). Si coincide parcialmente, INCLÚYELO.
-        3. Si ves una serie de montos pequeños repetidos en fechas cercanas, son peajes, INCLÚYELOS aunque el nombre sea genérico.
-        4. "Mercado Pago" seguido de "Telepase" o similar es un peaje.
-        5. NO filtres por duda. Ante la duda, si parece vial, es PEAJE.
-        
-        FORMATO JSON:
-        {
-          "metadata": { ... },
-          "items": [
-            { "fecha": "YYYY-MM-DD", "concepto": "Texto original", "monto": 1234.50, "categoria": "PEAJE" }
-          ]
-        }
+        Devuelve JSON con metadata e items.
     `;
     
     const combinedSchema = {
@@ -287,7 +279,14 @@ export const processCardExpenses = async (
                     config: { responseMimeType: "application/json", responseSchema: combinedSchema as any, temperature: 0.1 },
                 });
                 textResult = response.text || "{}";
-            } catch (err) {
+            } catch (err: any) {
+                 // Manejo específico de error 429
+                 if (err.message?.includes('429') || err.toString().includes('429') || err.status === 429) {
+                    console.warn(`Límite de API (429) en Gastos. Esperando ${10 * attempt} segundos...`);
+                    await wait(10000 * attempt);
+                    if (attempt === retries) throw new Error("Servidor ocupado (429). Intente más tarde.");
+                    continue;
+                 }
                  console.error("SDK Error (Expenses), trying fallback", err);
                  textResult = await generateContentFallback(apiKey, prompt, contents, combinedSchema);
             }
@@ -296,9 +295,10 @@ export const processCardExpenses = async (
             
             if (!data || !data.metadata) {
                  if (Array.isArray(data)) {
+                     // Fallback inteligente si devuelve array en vez de objeto
                      return { 
-                        metadata: { banco: "Desconocido", titular: "Desconocido", periodo: "-", fechaVencimiento: "-", totalResumen: 0 },
-                        items: [] 
+                        metadata: { banco: "Detectado por IA", titular: "Desconocido", periodo: "-", fechaVencimiento: "-", totalResumen: 0 },
+                        items: data.map((d: any) => ({...d, categoria: 'PEAJE', monto: Number(d.monto) || Number(d.valor) || 0 }))
                      };
                  }
                  throw new Error("Estructura JSON inválida");
@@ -308,7 +308,8 @@ export const processCardExpenses = async (
 
         } catch (error: any) {
             lastError = error;
-            if (attempt < retries) await wait(attempt * 2000);
+            if (error.message?.includes('429')) await wait(10000); // Wait extra on rate limit
+            else if (attempt < retries) await wait(attempt * 2000);
         }
     }
     

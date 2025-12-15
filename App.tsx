@@ -84,6 +84,13 @@ function App() {
     try {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
+            
+            // --- ANTI-THROTTLING PAUSE ---
+            // Si hay más de 1 archivo y no es el primero, esperamos para no saturar la API
+            if (i > 0 && files.length > 1) {
+                 await new Promise(r => setTimeout(r, 6000)); // Espera de 6 segundos entre archivos
+            }
+
             try {
                 const fileId = `file-${Date.now()}-${Math.random()}`; 
                 let contentData = '', mimeType = '';
@@ -105,12 +112,15 @@ function App() {
                      failedFiles.push(`${file.name} (0 datos extraídos)`);
                 } else {
                     newRecordsAcc.push(...verifyRecords(resultRecords.map(r => ({ ...r, sourceFileId: fileId, sourceFileName: file.name })), fleetDb));
-                    // Solo guardamos el archivo si trajo datos o si queremos registro de él
                     filesToSaveAcc.push({ id: fileId, name: file.name, type: file.type, size: file.size, content: contentData });
                 }
 
                 setStatus(prev => ({ ...prev, processedCount: (prev.processedCount || 0) + 1 }));
-            } catch (err: any) { failedFiles.push(`${file.name}: ${err.message}`); }
+            } catch (err: any) { 
+                failedFiles.push(`${file.name}: ${err.message}`); 
+                // Si falla, esperamos extra por si fue un rate limit no capturado
+                await new Promise(r => setTimeout(r, 2000));
+            }
         }
 
         if (newRecordsAcc.length > 0) { 
@@ -122,7 +132,7 @@ function App() {
 
         setStatus({ 
             isProcessing: false, 
-            error: failedFiles.length > 0 ? `Errores/Alertas: ${failedFiles.join(', ')}` : null, 
+            error: failedFiles.length > 0 ? `Alertas: ${failedFiles.join(', ')}` : null, 
             success: newRecordsAcc.length > 0 
         });
         

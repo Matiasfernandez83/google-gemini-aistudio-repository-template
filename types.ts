@@ -40,6 +40,22 @@ export interface ExpenseRecord {
   searchIndex?: string;
 }
 
+export interface ProcessedStatementResult {
+    metadata: {
+        banco: string;
+        titular: string;
+        periodo: string;
+        fechaVencimiento: string;
+        totalResumen: number;
+    };
+    items: {
+        fecha: string;
+        concepto: string;
+        monto: number;
+        categoria: 'PEAJE' | 'AUTOPISTA' | 'TELEPASE' | 'OTRO';
+    }[];
+}
+
 export interface FleetRecord {
   patente: string;
   dueno: string;
