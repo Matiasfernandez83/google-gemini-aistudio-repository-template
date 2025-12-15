@@ -99,9 +99,15 @@ function App() {
   const handleDbSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           try {
+              // Now reads ALL sheets
               const rawData = await parseExcelToRowArray(e.target.files[0]);
-              if (!rawData || rawData.length === 0) throw new Error("El archivo parece estar vacío.");
+              
+              if (!rawData || rawData.length === 0) {
+                  throw new Error("El archivo parece estar vacío.");
+              }
 
+              // 1. HEADER SCAN: Try to find column indices in the first 100 rows
+              // Improved regex based on user screenshot: "RESPONSABLE DE USUARIO", "NUMERO DE TAG", "EQUIPOS"
               let patIndex = -1, ownerIndex = -1, tagIndex = -1, equipoIndex = -1;
               for (let i = 0; i < Math.min(rawData.length, 100); i++) {
                   const row = rawData[i].map(c => c ? String(c).toLowerCase().trim() : '');
@@ -109,9 +115,11 @@ function App() {
                   if (ownerIndex === -1) ownerIndex = row.findIndex(c => /responsable|usuario|dueño|titular|transportista|chofer/i.test(c));
                   if (tagIndex === -1) tagIndex = row.findIndex(c => /tag|numero de tag|dispositivo/i.test(c));
                   if (equipoIndex === -1) equipoIndex = row.findIndex(c => /equipo|equipos|interno|unidad/i.test(c));
+                  
                   if (patIndex !== -1) break;
               }
 
+              // 2. DATA EXTRACTION
               const fleetData: FleetRecord[] = [];
               let processedRows = 0;
 
@@ -120,12 +128,15 @@ function App() {
                   if (!row || row.length === 0) continue;
                   let patenteRaw = '', duenoRaw = 'Desconocido', tagRaw = '', equipoRaw = '';
 
+                  // STRATEGY A: Column found
                   if (patIndex !== -1 && row[patIndex]) {
                       patenteRaw = String(row[patIndex]);
                       if (ownerIndex !== -1 && row[ownerIndex]) duenoRaw = String(row[ownerIndex]);
                       if (tagIndex !== -1 && row[tagIndex]) tagRaw = String(row[tagIndex]);
                       if (equipoIndex !== -1 && row[equipoIndex]) equipoRaw = String(row[equipoIndex]);
-                  } else {
+                  } 
+                  // STRATEGY B: Heuristic scan (Fallback)
+                  else {
                        const potentialPatent = row.find(cell => {
                            if (!cell) return false;
                            const s = String(cell).toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -133,25 +144,54 @@ function App() {
                        });
                        if (potentialPatent) {
                            patenteRaw = String(potentialPatent);
-                           const potentialOwner = row.find(cell => { const s = String(cell); return s !== potentialPatent && s.length > 5 && isNaN(Number(s)); });
+                           const potentialOwner = row.find(cell => {
+                               const s = String(cell);
+                               return s !== potentialPatent && s.length > 5 && isNaN(Number(s));
+                           });
                            if (potentialOwner) duenoRaw = String(potentialOwner);
                        }
                   }
 
+                  // CLEANUP
                   const patenteClean = patenteRaw.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
+                  
+                  // Validation: Length 6-10 chars.
                   if (patenteClean.length >= 6 && patenteClean.length <= 10) {
+                        // Exclude obvious header texts
                         if (!/PATENTE|DOMINIO|MATRICULA|TAG|EQUIPO|ESTADO|USUARIO/.test(patenteClean)) {
-                            fleetData.push({ patente: patenteClean, dueno: duenoRaw.trim() === '' || duenoRaw.trim().toLowerCase() === 'desconocido' ? 'Desconocido' : duenoRaw.trim(), tag: tagRaw.trim(), equipo: equipoRaw.trim() });
+                            fleetData.push({
+                                patente: patenteClean,
+                                dueno: duenoRaw.trim() === '' || duenoRaw.trim().toLowerCase() === 'desconocido' ? 'Desconocido' : duenoRaw.trim(),
+                                tag: tagRaw.trim(),
+                                equipo: equipoRaw.trim()
+                            });
                             processedRows++;
                         }
                   }
               }
 
+              // Deduplication
               const uniqueFleet = Array.from(new Map(fleetData.map(item => [item.patente, item])).values());
-              if (uniqueFleet.length === 0) { alert("No se detectaron registros válidos. Asegúrese de que el archivo contiene la columna 'PATENTE'."); return; }
-              setFleetDb(uniqueFleet); await saveFleet(uniqueFleet, currentUser!);
-              if (records.length > 0) { const upd = verifyRecords(records, uniqueFleet); setRecords(upd); await saveRecords(upd, currentUser!); }
-              alert(`PROCESO COMPLETADO:\n\n• Filas válidas detectadas: ${processedRows}\n• Registros ÚNICOS importados: ${uniqueFleet.length}`);
+              if (uniqueFleet.length === 0) {
+                  alert("No se detectaron registros válidos. Asegúrese de que el archivo contiene la columna 'PATENTE'.");
+                  return;
+              }
+              setFleetDb(uniqueFleet); 
+              await saveFleet(uniqueFleet, currentUser!);
+              
+              if (records.length > 0) { 
+                   const upd = verifyRecords(records, uniqueFleet); 
+                   setRecords(upd); 
+                   await saveRecords(upd, currentUser!); 
+               }
+              
+              // Detailed Feedback
+              const duplicateCount = processedRows - uniqueFleet.length;
+              alert(`PROCESO COMPLETADO:\n\n` + 
+                    `• Filas válidas detectadas en Excel: ${processedRows} (de ${rawData.length} totales)\n` +
+                    `• Registros ÚNICOS importados: ${uniqueFleet.length}\n` + 
+                    `• Duplicados unificados: ${duplicateCount}\n\n` +
+                    `Nota: Si el Excel tiene patentes repetidas (ej: mismo camión en dos filas), el sistema conserva solo una entrada para la Base Maestra.`);
 
           } catch (err: any) { alert("Error al procesar el archivo: " + err.message); }
       }
