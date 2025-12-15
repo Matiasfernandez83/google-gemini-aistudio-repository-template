@@ -77,21 +77,55 @@ function App() {
   const handleProcess = async () => {
     if (files.length === 0) return;
     setStatus({ isProcessing: true, error: null, success: false, processedCount: 0, totalCount: files.length });
-    const failedFiles: string[] = []; const newRecordsAcc: TruckRecord[] = []; const filesToSaveAcc: UploadedFile[] = [];
+    const failedFiles: string[] = []; 
+    const newRecordsAcc: TruckRecord[] = []; 
+    const filesToSaveAcc: UploadedFile[] = [];
+    
     try {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             try {
-                const fileId = `file-${Date.now()}-${Math.random()}`; let contentData = '', mimeType = '';
-                if (file.type === FileType.PDF) { contentData = await fileToBase64(file); mimeType = 'application/pdf'; } else { contentData = await parseExcelToCSV(file); mimeType = 'text/plain'; }
+                const fileId = `file-${Date.now()}-${Math.random()}`; 
+                let contentData = '', mimeType = '';
+                
+                // Mejorada detección de PDF: Verifica MIME type O extensión del nombre
+                const isPdf = file.type === FileType.PDF || file.name.toLowerCase().endsWith('.pdf');
+                
+                if (isPdf) { 
+                    contentData = await fileToBase64(file); 
+                    mimeType = 'application/pdf'; 
+                } else { 
+                    contentData = await parseExcelToCSV(file); 
+                    mimeType = 'text/plain'; 
+                }
+                
                 const resultRecords = await processDocuments([{ mimeType, data: contentData }]);
-                newRecordsAcc.push(...verifyRecords(resultRecords.map(r => ({ ...r, sourceFileId: fileId, sourceFileName: file.name })), fleetDb));
-                filesToSaveAcc.push({ id: fileId, name: file.name, type: file.type, size: file.size, content: contentData });
+                
+                if (resultRecords.length === 0) {
+                     failedFiles.push(`${file.name} (0 datos extraídos)`);
+                } else {
+                    newRecordsAcc.push(...verifyRecords(resultRecords.map(r => ({ ...r, sourceFileId: fileId, sourceFileName: file.name })), fleetDb));
+                    // Solo guardamos el archivo si trajo datos o si queremos registro de él
+                    filesToSaveAcc.push({ id: fileId, name: file.name, type: file.type, size: file.size, content: contentData });
+                }
+
                 setStatus(prev => ({ ...prev, processedCount: (prev.processedCount || 0) + 1 }));
-            } catch (err: any) { failedFiles.push(file.name); }
+            } catch (err: any) { failedFiles.push(`${file.name}: ${err.message}`); }
         }
-        if (newRecordsAcc.length > 0) { const all = [...records, ...newRecordsAcc]; setRecords(all); await saveRecords(all, currentUser); await saveFiles(filesToSaveAcc); }
-        setStatus({ isProcessing: false, error: failedFiles.length > 0 ? "Errores en algunos archivos" : null, success: true });
+
+        if (newRecordsAcc.length > 0) { 
+            const all = [...records, ...newRecordsAcc]; 
+            setRecords(all); 
+            await saveRecords(all, currentUser); 
+            await saveFiles(filesToSaveAcc); 
+        }
+
+        setStatus({ 
+            isProcessing: false, 
+            error: failedFiles.length > 0 ? `Errores/Alertas: ${failedFiles.join(', ')}` : null, 
+            success: newRecordsAcc.length > 0 
+        });
+        
         if (failedFiles.length === 0) setFiles([]);
     } catch (err: any) { setStatus({ isProcessing: false, error: err.message, success: false }); }
   };

@@ -14,14 +14,14 @@ const getResponseSchema = () => ({
     items: {
       type: Type.OBJECT,
       properties: {
-        patente: { type: Type.STRING, description: "La patente o matrícula del camión (ej: AB123CD)." },
-        tag: { type: Type.STRING, description: "El número de TAG, dispositivo de peaje o telepase." },
-        dueno: { type: Type.STRING, description: "Nombre del propietario o dueño del camión." },
-        valor: { type: Type.NUMBER, description: "El valor monetario, monto, flete o cantidad numérica." },
-        concepto: { type: Type.STRING, description: "Breve descripción del servicio o ítem." },
-        fecha: { type: Type.STRING, description: "Fecha del servicio si está disponible (YYYY-MM-DD)." }
+        patente: { type: Type.STRING, description: "La patente o matrícula. Si no es clara, usar 'PENDIENTE'." },
+        tag: { type: Type.STRING, description: "El número de TAG o dispositivo." },
+        dueno: { type: Type.STRING, description: "Nombre del propietario. Si no figura en la tabla, usar 'Desconocido'." },
+        valor: { type: Type.NUMBER, description: "El valor monetario o monto." },
+        concepto: { type: Type.STRING, description: "Descripción del ítem (peaje, fecha, lugar)." },
+        fecha: { type: Type.STRING, description: "Fecha (YYYY-MM-DD)." }
       },
-      required: ["patente", "dueno", "valor", "concepto"],
+      required: ["valor"], // Se reducen los requerimientos para evitar fallos si falta info no esencial
     },
 });
 
@@ -57,16 +57,7 @@ const cleanAndParseJSON = (text: string): any => {
 
 // --- VALIDATION HELPER ROBUST ---
 const getApiKey = (): string => {
-    // 1. Intento directo estándar Vite (La forma más segura en navegador)
-    if (import.meta.env.VITE_API_KEY && import.meta.env.VITE_API_KEY.trim() !== '') {
-        return import.meta.env.VITE_API_KEY;
-    }
-    
-    if (import.meta.env.API_KEY && import.meta.env.API_KEY.trim() !== '') {
-        return import.meta.env.API_KEY;
-    }
-
-    // 2. Intento Variable Global Inyectada (Fallback)
+    // 1. Prioridad: Variable inyectada por Vite en build time (Más estable en producción)
     try {
         // @ts-ignore
         if (typeof __API_KEY__ !== 'undefined' && __API_KEY__ && __API_KEY__.trim() !== '') {
@@ -74,8 +65,32 @@ const getApiKey = (): string => {
         }
     } catch (e) {}
 
-    // 3. Fallo total
-    console.error("API Key no encontrada en import.meta.env.VITE_API_KEY ni __API_KEY__");
+    // 2. Prioridad: import.meta.env (Estándar Vite) - CON CHEQUEO DEFENSIVO
+    try {
+        // Verificamos explícitamente que import.meta y import.meta.env existan antes de acceder
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+            if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+        }
+    } catch (e) {
+        // Ignoramos errores de acceso aquí para probar el siguiente método
+        console.warn("Error accediendo a import.meta.env", e);
+    }
+
+    // 3. Prioridad: process.env (Fallback para algunos entornos)
+    try {
+        // @ts-ignore
+        if (typeof process !== 'undefined' && process.env) {
+             // @ts-ignore
+            if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+             // @ts-ignore
+            if (process.env.API_KEY) return process.env.API_KEY;
+        }
+    } catch (e) {}
+
+    // Si llegamos aquí, no hay llave
+    console.error("API Key no encontrada en ninguna fuente (__API_KEY__, import.meta.env, process.env)");
     throw new Error("FALTA API KEY: Verifica que tu archivo .env tenga VITE_API_KEY=... y reinicia la terminal.");
 };
 
@@ -125,11 +140,21 @@ export const processDocuments = async (
   const apiKey = getApiKey();
 
   const schema = getResponseSchema();
-  const prompt = `Actúa como un sistema experto de ERP logístico. Analiza el documento. 
-  Busca tablas de movimientos, viajes o gastos de flota.
-  Extrae: Patente, TAG, Dueño, Valor (Monto), Concepto, Fecha.
-  Si no encuentras datos de camiones válidos, responde con un array vacío [].
-  Formato salida: JSON Array.`;
+  // Prompt mejorado para ser más permisivo y no fallar si faltan columnas como "Dueño"
+  const prompt = `Actúa como un sistema experto de ERP logístico. Analiza el documento (PDF/Imagen/Texto). 
+  Busca tablas de movimientos, viajes, peajes o gastos.
+  
+  Extrae la siguiente información por cada fila detectada:
+  - Patente (Dominio/Matrícula).
+  - TAG (Dispositivo).
+  - Dueño (Transportista). Si no está explícito en la fila, usa "Desconocido".
+  - Valor (Monto/Importe). Es obligatorio.
+  - Concepto (Lugar/Peaje/Detalle).
+  - Fecha.
+  
+  Si la tabla tiene datos pero falta el "Dueño", extráelos igual usando "Desconocido".
+  Si la patente no se lee bien, usa "PENDIENTE".
+  Devuelve todos los registros encontrados en un array JSON.`;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -153,6 +178,11 @@ export const processDocuments = async (
 
         return data.map((item: any, index: number) => ({
             ...item,
+            // Valores por defecto robustos
+            patente: item.patente || 'PENDIENTE',
+            dueno: item.dueno || 'Desconocido',
+            concepto: item.concepto || 'Varios',
+            valor: Number(item.valor) || 0,
             id: `gen-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`
         }));
       } catch (error: any) {
