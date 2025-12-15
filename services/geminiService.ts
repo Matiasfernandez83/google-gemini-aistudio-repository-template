@@ -2,7 +2,7 @@
 import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Declaración local por seguridad (aunque esté en d.ts)
+// Declaración local por seguridad
 declare const __API_KEY__: string;
 
 // --- HELPERS ---
@@ -32,42 +32,51 @@ const cleanAndParseJSON = (text: string): any => {
         const firstBracket = cleaned.indexOf('[');
         const firstBrace = cleaned.indexOf('{');
         
-        if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-            const lastBrace = cleaned.lastIndexOf('}');
-            cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-        } else if (firstBracket !== -1) {
-            const lastBracket = cleaned.lastIndexOf(']');
-            cleaned = cleaned.substring(firstBracket, lastBracket + 1);
+        let startIndex = -1;
+        let endIndex = -1;
+
+        if (firstBracket !== -1 && (firstBrace === -1 || firstBracket < firstBrace)) {
+            startIndex = firstBracket;
+            endIndex = cleaned.lastIndexOf(']');
+        } else if (firstBrace !== -1) {
+            startIndex = firstBrace;
+            endIndex = cleaned.lastIndexOf('}');
+        }
+
+        if (startIndex !== -1 && endIndex !== -1) {
+            cleaned = cleaned.substring(startIndex, endIndex + 1);
         }
 
         cleaned = cleaned.trim();
         return JSON.parse(cleaned);
     } catch (e) {
         console.error("JSON Parse Error. Raw Text:", text);
-        throw new Error("La IA generó un formato inválido. Intente nuevamente.");
+        return []; 
     }
 };
 
 // --- VALIDATION HELPER ROBUST ---
 const getApiKey = (): string => {
-    let key = '';
+    // 1. Intento directo estándar Vite (La forma más segura en navegador)
+    if (import.meta.env.VITE_API_KEY && import.meta.env.VITE_API_KEY.trim() !== '') {
+        return import.meta.env.VITE_API_KEY;
+    }
+    
+    if (import.meta.env.API_KEY && import.meta.env.API_KEY.trim() !== '') {
+        return import.meta.env.API_KEY;
+    }
 
-    // 1. Intento: Variable Inyectada por Vite (Define)
+    // 2. Intento Variable Global Inyectada (Fallback)
     try {
-        if (typeof __API_KEY__ !== 'undefined') key = __API_KEY__;
+        // @ts-ignore
+        if (typeof __API_KEY__ !== 'undefined' && __API_KEY__ && __API_KEY__.trim() !== '') {
+            return __API_KEY__;
+        }
     } catch (e) {}
 
-    // 2. Intento: Variables de entorno estándar Vite
-    if ((!key || key.trim() === '') && import.meta && import.meta.env) {
-        if (import.meta.env.VITE_API_KEY) key = import.meta.env.VITE_API_KEY;
-        else if (import.meta.env.API_KEY) key = import.meta.env.API_KEY;
-    }
-
-    if (!key || key.trim() === '') {
-        console.error("API Key vacía en todas las fuentes (__API_KEY__, VITE_API_KEY, API_KEY).");
-        throw new Error("FALTA API KEY: Crea un archivo .env con 'VITE_API_KEY=tu_clave' y REINICIA la terminal.");
-    }
-    return key;
+    // 3. Fallo total
+    console.error("API Key no encontrada en import.meta.env.VITE_API_KEY ni __API_KEY__");
+    throw new Error("FALTA API KEY: Verifica que tu archivo .env tenga VITE_API_KEY=... y reinicia la terminal.");
 };
 
 // --- FALLBACK METHOD ---
@@ -113,11 +122,14 @@ export const processDocuments = async (
   retries = 3
 ): Promise<TruckRecord[]> => {
   let lastError: any;
-  let apiKey = "";
-  try { apiKey = getApiKey(); } catch (e: any) { throw e; }
+  const apiKey = getApiKey();
 
   const schema = getResponseSchema();
-  const prompt = `Actúa como un sistema experto de ERP. Analiza doc. Extrae: TAG, Patente, Dueño, Valor, Concepto. JSON array.`;
+  const prompt = `Actúa como un sistema experto de ERP logístico. Analiza el documento. 
+  Busca tablas de movimientos, viajes o gastos de flota.
+  Extrae: Patente, TAG, Dueño, Valor (Monto), Concepto, Fecha.
+  Si no encuentras datos de camiones válidos, responde con un array vacío [].
+  Formato salida: JSON Array.`;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -135,23 +147,26 @@ export const processDocuments = async (
             console.warn("SDK Error, using fallback:", e);
             textResult = await generateContentFallback(apiKey, prompt, contents, schema);
         }
+        
         const data = cleanAndParseJSON(textResult);
-        return Array.isArray(data) ? data.map((item, index) => ({
+        if (!Array.isArray(data)) return [];
+
+        return data.map((item: any, index: number) => ({
             ...item,
             id: `gen-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`
-        })) : [];
+        }));
       } catch (error: any) {
         lastError = error;
         if (attempt < retries) await wait(attempt * 2000);
       }
   }
-  throw new Error(`Error final: ${lastError?.message || 'Error desconocido'}`);
+  throw new Error(`Error procesando documento: ${lastError?.message || 'Error desconocido'}`);
 };
 
 // --- NEW SERVICE: CREDIT CARD EXPENSES (ENHANCED) ---
 
 interface ProcessedStatementResult {
-    metadata: Omit<CardStatement, 'id' | 'sourceFileId'>;
+    metadata: Omit<CardStatement, 'id' | 'sourceFileId' | 'timestamp'>;
     items: Omit<ExpenseRecord, 'id' | 'statementId' | 'sourceFileId' | 'sourceFileName'>[];
 }
 
@@ -160,10 +175,8 @@ export const processCardExpenses = async (
     retries = 3
 ): Promise<ProcessedStatementResult> => {
     let lastError: any;
-    let apiKey = "";
-    try { apiKey = getApiKey(); } catch (e: any) { throw e; }
+    const apiKey = getApiKey();
     
-    // Lista ULTRA completa de keywords para Argentina
     const keywords = [
         "peaje", "telepeaje", "telepase", "autopista", "ruta", "acceso", "corredor", 
         "vial", "camino", "autovia", "concesionaria", "tasa", "tariff", "cabina", "estacion",
@@ -173,7 +186,7 @@ export const processCardExpenses = async (
         "riccheri", "illia", "perito moreno", "7 lagos", "andes", "litoral", "gco", "oeste",
         "mercadopago*telepase", "mp*telepase", "mercado pago telepase", "servicios viales", 
         "cv1", "cv2", "cv3", "cv4", "cv5", "cv 1", "cv 2", "cv 3", "cv 4", "cv 5",
-        "a.u.s.a.", "a.u.s.o.l.", "g.c.o.", "caminos del valle"
+        "a.u.s.a.", "a.u.s.o.l.", "g.c.o.", "caminos del valle", "yyp", "caminos", "cf", "cab"
     ];
 
     const prompt = `
@@ -187,7 +200,7 @@ export const processCardExpenses = async (
         
         INSTRUCCIONES DE BÚSQUEDA:
         1. Busca en columna 'Concepto' o 'Detalle' las palabras clave: ${keywords.join(', ')}.
-        2. IMPORTANTE: A veces el concepto es críptico (ej: "CVSA", "GCO SA", "AUSA"). Si coincide parcialmente, INCLÚYELO.
+        2. IMPORTANTE: A veces el concepto es críptico (ej: "CVSA", "GCO SA", "AUSA", "YYP"). Si coincide parcialmente, INCLÚYELO.
         3. Si ves una serie de montos pequeños repetidos en fechas cercanas, son peajes, INCLÚYELOS aunque el nombre sea genérico.
         4. "Mercado Pago" seguido de "Telepase" o similar es un peaje.
         5. NO filtres por duda. Ante la duda, si parece vial, es PEAJE.
@@ -250,12 +263,21 @@ export const processCardExpenses = async (
             }
 
             const data = cleanAndParseJSON(textResult);
-            if (!data.metadata || !Array.isArray(data.items)) throw new Error("Estructura JSON inválida");
+            
+            if (!data || !data.metadata) {
+                 if (Array.isArray(data)) {
+                     return { 
+                        metadata: { banco: "Desconocido", titular: "Desconocido", periodo: "-", fechaVencimiento: "-", totalResumen: 0 },
+                        items: [] 
+                     };
+                 }
+                 throw new Error("Estructura JSON inválida");
+            }
+
             return data as ProcessedStatementResult;
 
         } catch (error: any) {
             lastError = error;
-            console.warn(`Attempt ${attempt} failed:`, error.message);
             if (attempt < retries) await wait(attempt * 2000);
         }
     }
@@ -264,8 +286,7 @@ export const processCardExpenses = async (
 };
 
 export const convertPdfToData = async (contents: { mimeType: string; data: string }[]): Promise<any[]> => {
-    let apiKey = "";
-    try { apiKey = getApiKey(); } catch (e: any) { throw e; }
+    const apiKey = getApiKey();
     const prompt = `Analiza PDF. Extrae tabla principal. JSON array.`;
     try {
         let textResult = "";
