@@ -1,21 +1,21 @@
 import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // --- HELPERS ---
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const getResponseSchema = () => ({
-    type: "ARRAY",
+    type: Type.ARRAY,
     items: {
-      type: "OBJECT",
+      type: Type.OBJECT,
       properties: {
-        patente: { type: "STRING", description: "La patente o matrícula del camión (ej: AB123CD)." },
-        tag: { type: "STRING", description: "El número de TAG, dispositivo de peaje o telepase." },
-        dueno: { type: "STRING", description: "Nombre del propietario o dueño del camión." },
-        valor: { type: "NUMBER", description: "El valor monetario, monto, flete o cantidad numérica." },
-        concepto: { type: "STRING", description: "Breve descripción del servicio o ítem." },
-        fecha: { type: "STRING", description: "Fecha del servicio si está disponible (YYYY-MM-DD)." }
+        patente: { type: Type.STRING, description: "La patente o matrícula del camión (ej: AB123CD)." },
+        tag: { type: Type.STRING, description: "El número de TAG, dispositivo de peaje o telepase." },
+        dueno: { type: Type.STRING, description: "Nombre del propietario o dueño del camión." },
+        valor: { type: Type.NUMBER, description: "El valor monetario, monto, flete o cantidad numérica." },
+        concepto: { type: Type.STRING, description: "Breve descripción del servicio o ítem." },
+        fecha: { type: Type.STRING, description: "Fecha del servicio si está disponible (YYYY-MM-DD)." }
       },
       required: ["patente", "dueno", "valor", "concepto"],
     },
@@ -185,28 +185,28 @@ export const processCardExpenses = async (
     `;
     
     const combinedSchema = {
-        type: "OBJECT",
+        type: Type.OBJECT,
         properties: {
             metadata: {
-                type: "OBJECT",
+                type: Type.OBJECT,
                 properties: {
-                    banco: { type: "STRING" },
-                    titular: { type: "STRING" },
-                    periodo: { type: "STRING" },
-                    fechaVencimiento: { type: "STRING" },
-                    totalResumen: { type: "NUMBER" }
+                    banco: { type: Type.STRING },
+                    titular: { type: Type.STRING },
+                    periodo: { type: Type.STRING },
+                    fechaVencimiento: { type: Type.STRING },
+                    totalResumen: { type: Type.NUMBER }
                 },
                 required: ["banco", "totalResumen", "fechaVencimiento"]
             },
             items: {
-                type: "ARRAY",
+                type: Type.ARRAY,
                 items: {
-                    type: "OBJECT",
+                    type: Type.OBJECT,
                     properties: {
-                        fecha: { type: "STRING" },
-                        concepto: { type: "STRING" },
-                        monto: { type: "NUMBER" },
-                        categoria: { type: "STRING", enum: ["PEAJE"] }
+                        fecha: { type: Type.STRING },
+                        concepto: { type: Type.STRING },
+                        monto: { type: Type.NUMBER },
+                        categoria: { type: Type.STRING, enum: ["PEAJE"] }
                     },
                     required: ["fecha", "concepto", "monto", "categoria"]
                 }
