@@ -2,7 +2,7 @@
 import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Declaración para TypeScript de la variable inyectada por Vite
+// Declaración local por seguridad (aunque esté en d.ts)
 declare const __API_KEY__: string;
 
 // --- HELPERS ---
@@ -25,9 +25,6 @@ const getResponseSchema = () => ({
     },
 });
 
-/**
- * Robust JSON parser for LLM outputs.
- */
 const cleanAndParseJSON = (text: string): any => {
     try {
         if (!text) return null;
@@ -35,7 +32,6 @@ const cleanAndParseJSON = (text: string): any => {
         const firstBracket = cleaned.indexOf('[');
         const firstBrace = cleaned.indexOf('{');
         
-        // Determine if it's object or array
         if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
             const lastBrace = cleaned.lastIndexOf('}');
             cleaned = cleaned.substring(firstBrace, lastBrace + 1);
@@ -52,32 +48,37 @@ const cleanAndParseJSON = (text: string): any => {
     }
 };
 
-// --- VALIDATION HELPER ---
+// --- VALIDATION HELPER ROBUST ---
 const getApiKey = (): string => {
-    // Usamos la variable global definida en vite.config.ts
-    // Esto evita depender de process.env que causa conflictos en el navegador
-    const key = typeof __API_KEY__ !== 'undefined' ? __API_KEY__ : '';
+    let key = '';
+
+    // 1. Intento: Variable Inyectada por Vite (Define)
+    try {
+        if (typeof __API_KEY__ !== 'undefined') key = __API_KEY__;
+    } catch (e) {}
+
+    // 2. Intento: Variables de entorno estándar Vite
+    if ((!key || key.trim() === '') && import.meta && import.meta.env) {
+        if (import.meta.env.VITE_API_KEY) key = import.meta.env.VITE_API_KEY;
+        else if (import.meta.env.API_KEY) key = import.meta.env.API_KEY;
+    }
 
     if (!key || key.trim() === '') {
-        console.error("API Key vacía.");
-        throw new Error("FALTA API KEY: Verifica haber creado el archivo .env y REINICIADO la terminal (npm run dev).");
+        console.error("API Key vacía en todas las fuentes (__API_KEY__, VITE_API_KEY, API_KEY).");
+        throw new Error("FALTA API KEY: Crea un archivo .env con 'VITE_API_KEY=tu_clave' y REINICIA la terminal.");
     }
     return key;
 };
 
-// --- FALLBACK METHOD (DIRECT REST API) ---
+// --- FALLBACK METHOD ---
 const generateContentFallback = async (apiKey: string, prompt: string, contents: any[], schema?: any) => {
-    console.warn("Using Fallback REST API for generation...");
-    
+    console.warn("Using Fallback REST API...");
     const parts = contents.map((c: any) => {
         if (c.mimeType === 'text/plain') return { text: c.data };
         return { inlineData: { mimeType: c.mimeType, data: c.data } };
     });
     
-    const generationConfig: any = {
-        temperature: 0.1
-    };
-
+    const generationConfig: any = { temperature: 0.1 };
     if (schema) {
         generationConfig.responseMimeType = "application/json";
         generationConfig.responseSchema = schema;
@@ -113,12 +114,7 @@ export const processDocuments = async (
 ): Promise<TruckRecord[]> => {
   let lastError: any;
   let apiKey = "";
-  
-  try {
-      apiKey = getApiKey();
-  } catch (e: any) {
-      throw e; // Relanzar inmediatamente si falta la key
-  }
+  try { apiKey = getApiKey(); } catch (e: any) { throw e; }
 
   const schema = getResponseSchema();
   const prompt = `Actúa como un sistema experto de ERP. Analiza doc. Extrae: TAG, Patente, Dueño, Valor, Concepto. JSON array.`;
@@ -165,50 +161,44 @@ export const processCardExpenses = async (
 ): Promise<ProcessedStatementResult> => {
     let lastError: any;
     let apiKey = "";
-
-    try {
-        apiKey = getApiKey();
-    } catch (e: any) {
-        throw e;
-    }
+    try { apiKey = getApiKey(); } catch (e: any) { throw e; }
     
-    // Expanded keywords for extraction
+    // Lista ULTRA completa de keywords para Argentina
     const keywords = [
-        "corredores viales", "autopista", "aubasa", "accesos", "ausol", 
-        "camino", "cvsa", "telepeaje", "telepase", "peaje", 
-        "mercadopago", "mp", "caminos de las sierras", "tasa", "concesionaria"
+        "peaje", "telepeaje", "telepase", "autopista", "ruta", "acceso", "corredor", 
+        "vial", "camino", "autovia", "concesionaria", "tasa", "tariff", "cabina", "estacion",
+        "ausol", "autopistas del sol", "ausa", "autopistas urbanas", "aubasa", "buenos aires",
+        "cvsa", "corredores viales", "caminos de las sierras", "caminos del rio uruguay", "rio uruguay",
+        "cruz del sur", "accesos norte", "acceso oeste", "grupo concesionario", "autovia del mar", 
+        "riccheri", "illia", "perito moreno", "7 lagos", "andes", "litoral", "gco", "oeste",
+        "mercadopago*telepase", "mp*telepase", "mercado pago telepase", "servicios viales", 
+        "cv1", "cv2", "cv3", "cv4", "cv5", "cv 1", "cv 2", "cv 3", "cv 4", "cv 5",
+        "a.u.s.a.", "a.u.s.o.l.", "g.c.o.", "caminos del valle"
     ];
 
     const prompt = `
-        Analiza este resumen de tarjeta de crédito (PDF/Excel) de Argentina.
+        Analiza exhaustivamente este resumen de tarjeta (PDF/Excel) para detectar GASTOS DE PEAJE Y TELEPASE.
         
-        OBJETIVO 1: Extraer METADATA CRÍTICA DEL RESUMEN (Encabezado).
-        Debes extraer con ALTA PRECISIÓN los siguientes 5 campos:
+        OBJETIVO 1: METADATA
+        Extrae: "banco", "titular", "periodo", "fechaVencimiento" (YYYY-MM-DD), "totalResumen" (Saldo Final).
 
-        1. "banco": Nombre del banco emisor (ej: Galicia, Santander, BBVA, Visa, Amex, Mastercard).
-
-        2. "titular": Nombre de la persona o empresa dueña de la cuenta.
-           - REGLA: Busca etiquetas explícitas como "Titular", "Cliente", "Señor/a", "A nombre de".
-           - INFERENCIA: Si no hay etiqueta, busca el nombre/razón social destacado en el encabezado superior (usualmente izquierda o derecha, junto a la dirección).
-
-        3. "periodo": El rango de fechas del resumen (ej: "Dic 23", "01/01/24 - 31/01/24"). Si no hay rango, usa el mes de cierre.
-
-        4. "fechaVencimiento": La FECHA LÍMITE DE PAGO ACTUAL (Formato YYYY-MM-DD).
-           - REGLA: Busca "Vencimiento", "Vence", "Vto. Actual".
-           - IMPORTANTE: No confundir con "Próximo Vencimiento" o "Vencimiento resumen anterior".
-
-        5. "totalResumen": El MONTO FINAL TOTAL A PAGAR (Saldo Total).
-           - REGLA: Busca etiquetas como "Total a Pagar", "Saldo Total", "Saldo al cierre", "Importe a abonar", "Saldo actual".
-           - CRÍTICO: Debes tomar el monto MAYOR que represente la deuda total del periodo.
-           - EXCLUSIÓN: Ignora absolutamente "Pago Mínimo", "Saldo Anterior" o "Pago parcial".
-
-        OBJETIVO 2: Extraer ITEMS DE PEAJES Y AUTOPISTAS.
-        Filtra las filas usando estas palabras clave: ${keywords.join(', ')}.
-        - EXCLUYE gastos en dólares o de países limítrofes (Chile, Uruguay, Brasil).
-        - "categoria": Siempre "PEAJE".
-        - "fecha": YYYY-MM-DD.
-
-        Retorna un OBJETO JSON con dos claves: "metadata" y "items".
+        OBJETIVO 2: ITEMS DE PEAJE (Detección Agresiva)
+        Tu prioridad absoluta es listar CADA movimiento que parezca un peaje o servicio vial.
+        
+        INSTRUCCIONES DE BÚSQUEDA:
+        1. Busca en columna 'Concepto' o 'Detalle' las palabras clave: ${keywords.join(', ')}.
+        2. IMPORTANTE: A veces el concepto es críptico (ej: "CVSA", "GCO SA", "AUSA"). Si coincide parcialmente, INCLÚYELO.
+        3. Si ves una serie de montos pequeños repetidos en fechas cercanas, son peajes, INCLÚYELOS aunque el nombre sea genérico.
+        4. "Mercado Pago" seguido de "Telepase" o similar es un peaje.
+        5. NO filtres por duda. Ante la duda, si parece vial, es PEAJE.
+        
+        FORMATO JSON:
+        {
+          "metadata": { ... },
+          "items": [
+            { "fecha": "YYYY-MM-DD", "concepto": "Texto original", "monto": 1234.50, "categoria": "PEAJE" }
+          ]
+        }
     `;
     
     const combinedSchema = {
@@ -245,54 +235,37 @@ export const processCardExpenses = async (
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             let textResult = "";
-
             try {
                 const ai = new GoogleGenAI({ apiKey });
-                
-                const sdkParts = contents.map(c => {
-                    if (c.mimeType === 'text/plain') return { text: c.data };
-                    return { inlineData: { mimeType: c.mimeType, data: c.data } };
-                });
-
+                const sdkParts = contents.map(c => c.mimeType === 'text/plain' ? { text: c.data } : { inlineData: { mimeType: c.mimeType, data: c.data } });
                 const response = await ai.models.generateContent({
                     model: "gemini-2.5-flash",
                     contents: { parts: [...sdkParts, { text: prompt }] },
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: combinedSchema as any,
-                        temperature: 0.1,
-                    },
+                    config: { responseMimeType: "application/json", responseSchema: combinedSchema as any, temperature: 0.1 },
                 });
                 textResult = response.text || "{}";
-            } catch (importOrSdkErr) {
-                 console.error("SDK load failed (Expenses), switching to fallback", importOrSdkErr);
+            } catch (err) {
+                 console.error("SDK Error (Expenses), trying fallback", err);
                  textResult = await generateContentFallback(apiKey, prompt, contents, combinedSchema);
             }
 
             const data = cleanAndParseJSON(textResult);
-            
-            // Validate structure
-            if (!data.metadata || !Array.isArray(data.items)) {
-                throw new Error("Formato de respuesta IA incorrecto");
-            }
-
+            if (!data.metadata || !Array.isArray(data.items)) throw new Error("Estructura JSON inválida");
             return data as ProcessedStatementResult;
 
         } catch (error: any) {
             lastError = error;
-            console.warn(`Intento ${attempt} (Gastos) fallido:`, error.message);
+            console.warn(`Attempt ${attempt} failed:`, error.message);
             if (attempt < retries) await wait(attempt * 2000);
         }
     }
     
-    throw new Error(`Error procesando gastos: ${lastError?.message || 'Fallo desconocido'}`);
+    throw new Error(`Fallo procesamiento de gastos: ${lastError?.message}`);
 };
 
-// --- PDF TO EXCEL CONVERTER ---
-export const convertPdfToData = async (
-    contents: { mimeType: string; data: string }[]
-): Promise<any[]> => {
-    const apiKey = getApiKey();
+export const convertPdfToData = async (contents: { mimeType: string; data: string }[]): Promise<any[]> => {
+    let apiKey = "";
+    try { apiKey = getApiKey(); } catch (e: any) { throw e; }
     const prompt = `Analiza PDF. Extrae tabla principal. JSON array.`;
     try {
         let textResult = "";
@@ -303,5 +276,5 @@ export const convertPdfToData = async (
             textResult = response.text || "[]";
         } catch (e) { textResult = await generateContentFallback(apiKey, prompt, contents); }
         return cleanAndParseJSON(textResult);
-    } catch (e: any) { throw new Error("Error en conversión PDF: " + e.message); }
+    } catch (e: any) { throw new Error("Error conversión PDF: " + e.message); }
 };
