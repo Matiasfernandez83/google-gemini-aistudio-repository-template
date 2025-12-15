@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Stats } from './components/Stats';
 import { Charts } from './components/Charts';
@@ -14,9 +14,9 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { ExpensesView } from './components/ExpensesView';
 import { RefreshCw, Menu, Calendar, Trash2, Database, ArrowRightLeft } from 'lucide-react';
 import { TruckRecord, ExpenseRecord, ProcessingStatus, FileType, FleetRecord, View, UploadedFile, ModalData, User, ThemeSettings } from './types';
-import { parseExcelToCSV, fileToBase64, parseExcelToRowArray, parseExcelToJSON } from './utils/excelParser';
+import { parseExcelToCSV, fileToBase64, parseExcelToRowArray } from './utils/excelParser';
 import { processDocuments, convertPdfToData } from './services/geminiService';
-import { getRecords, saveRecords, getFleet, saveFleet, saveFiles, clearRecords, getTheme, saveTheme, getFileById, getExpenses, deleteRecords, logAction } from './utils/storage';
+import { getRecords, saveRecords, getFleet, saveFleet, saveFiles, clearRecords, getExpenses, deleteRecords, logAction, getFileById } from './utils/storage';
 import clsx from 'clsx';
 
 function App() {
@@ -99,52 +99,33 @@ function App() {
   const handleDbSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           try {
-              // Now reads ALL sheets
               const rawData = await parseExcelToRowArray(e.target.files[0]);
-              
-              if (!rawData || rawData.length === 0) {
-                  throw new Error("El archivo parece estar vacío.");
-              }
+              if (!rawData || rawData.length === 0) throw new Error("El archivo parece estar vacío.");
 
-              let patIndex = -1;
-              let ownerIndex = -1;
-              let tagIndex = -1;
-              let equipoIndex = -1;
-
-              // 1. HEADER SCAN: Try to find column indices in the first 100 rows
-              // Improved regex based on user screenshot: "RESPONSABLE DE USUARIO", "NUMERO DE TAG", "EQUIPOS"
+              let patIndex = -1, ownerIndex = -1, tagIndex = -1, equipoIndex = -1;
               for (let i = 0; i < Math.min(rawData.length, 100); i++) {
                   const row = rawData[i].map(c => c ? String(c).toLowerCase().trim() : '');
                   if (patIndex === -1) patIndex = row.findIndex(c => /patente|dominio|matricula/i.test(c));
                   if (ownerIndex === -1) ownerIndex = row.findIndex(c => /responsable|usuario|dueño|titular|transportista|chofer/i.test(c));
                   if (tagIndex === -1) tagIndex = row.findIndex(c => /tag|numero de tag|dispositivo/i.test(c));
                   if (equipoIndex === -1) equipoIndex = row.findIndex(c => /equipo|equipos|interno|unidad/i.test(c));
-                  
                   if (patIndex !== -1) break;
               }
 
-              // 2. DATA EXTRACTION
               const fleetData: FleetRecord[] = [];
               let processedRows = 0;
 
               for (let i = 0; i < rawData.length; i++) {
                   const row = rawData[i];
                   if (!row || row.length === 0) continue;
+                  let patenteRaw = '', duenoRaw = 'Desconocido', tagRaw = '', equipoRaw = '';
 
-                  let patenteRaw = '';
-                  let duenoRaw = 'Desconocido';
-                  let tagRaw = '';
-                  let equipoRaw = '';
-
-                  // STRATEGY A: Column found
                   if (patIndex !== -1 && row[patIndex]) {
                       patenteRaw = String(row[patIndex]);
                       if (ownerIndex !== -1 && row[ownerIndex]) duenoRaw = String(row[ownerIndex]);
                       if (tagIndex !== -1 && row[tagIndex]) tagRaw = String(row[tagIndex]);
                       if (equipoIndex !== -1 && row[equipoIndex]) equipoRaw = String(row[equipoIndex]);
-                  } 
-                  // STRATEGY B: Heuristic scan (Fallback)
-                  else {
+                  } else {
                        const potentialPatent = row.find(cell => {
                            if (!cell) return false;
                            const s = String(cell).toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -152,56 +133,25 @@ function App() {
                        });
                        if (potentialPatent) {
                            patenteRaw = String(potentialPatent);
-                           const potentialOwner = row.find(cell => {
-                               const s = String(cell);
-                               return s !== potentialPatent && s.length > 5 && isNaN(Number(s));
-                           });
+                           const potentialOwner = row.find(cell => { const s = String(cell); return s !== potentialPatent && s.length > 5 && isNaN(Number(s)); });
                            if (potentialOwner) duenoRaw = String(potentialOwner);
                        }
                   }
 
-                  // CLEANUP
                   const patenteClean = patenteRaw.toUpperCase().replace(/[^A-Z0-9]/g, ''); 
-                  
-                  // Validation: Length 6-10 chars.
                   if (patenteClean.length >= 6 && patenteClean.length <= 10) {
-                        // Exclude obvious header texts
                         if (!/PATENTE|DOMINIO|MATRICULA|TAG|EQUIPO|ESTADO|USUARIO/.test(patenteClean)) {
-                            fleetData.push({
-                                patente: patenteClean,
-                                dueno: duenoRaw.trim() === '' || duenoRaw.trim().toLowerCase() === 'desconocido' ? 'Desconocido' : duenoRaw.trim(),
-                                tag: tagRaw.trim(),
-                                equipo: equipoRaw.trim()
-                            });
+                            fleetData.push({ patente: patenteClean, dueno: duenoRaw.trim() === '' || duenoRaw.trim().toLowerCase() === 'desconocido' ? 'Desconocido' : duenoRaw.trim(), tag: tagRaw.trim(), equipo: equipoRaw.trim() });
                             processedRows++;
                         }
                   }
               }
 
-              // Deduplication
               const uniqueFleet = Array.from(new Map(fleetData.map(item => [item.patente, item])).values());
-
-              if (uniqueFleet.length === 0) {
-                  alert("No se detectaron registros válidos. Asegúrese de que el archivo contiene la columna 'PATENTE'.");
-                  return;
-              }
-
-              setFleetDb(uniqueFleet); 
-              await saveFleet(uniqueFleet, currentUser!);
-              
-              if (records.length > 0) { 
-                  const upd = verifyRecords(records, uniqueFleet); 
-                  setRecords(upd); 
-                  await saveRecords(upd, currentUser!); 
-              }
-
-              // Detailed Feedback
-              const duplicateCount = processedRows - uniqueFleet.length;
-              alert(`PROCESO COMPLETADO:\n\n` + 
-                    `• Filas válidas detectadas en Excel: ${processedRows} (de ${rawData.length} totales)\n` +
-                    `• Registros ÚNICOS importados: ${uniqueFleet.length}\n` + 
-                    `• Duplicados unificados: ${duplicateCount}\n\n` +
-                    `Nota: Si el Excel tiene patentes repetidas (ej: mismo camión en dos filas), el sistema conserva solo una entrada para la Base Maestra.`);
+              if (uniqueFleet.length === 0) { alert("No se detectaron registros válidos. Asegúrese de que el archivo contiene la columna 'PATENTE'."); return; }
+              setFleetDb(uniqueFleet); await saveFleet(uniqueFleet, currentUser!);
+              if (records.length > 0) { const upd = verifyRecords(records, uniqueFleet); setRecords(upd); await saveRecords(upd, currentUser!); }
+              alert(`PROCESO COMPLETADO:\n\n• Filas válidas detectadas: ${processedRows}\n• Registros ÚNICOS importados: ${uniqueFleet.length}`);
 
           } catch (err: any) { alert("Error al procesar el archivo: " + err.message); }
       }
@@ -213,18 +163,22 @@ function App() {
         if (convertFile.name.endsWith('.pdf')) {
             const base64 = await fileToBase64(convertFile); const data = await convertPdfToData([{ mimeType: 'application/pdf', data: base64 }]);
             if (data.length) { const XLSX = await import('xlsx'); const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Data"); XLSX.writeFile(wb, "Convertido.xlsx"); }
-        } else { /* Excel logic */ }
+        }
     } catch (e: any) { alert(e.message); } finally { setIsConverting(false); setConvertFile(null); }
   };
 
   if (!currentUser) return <LoginScreen onLogin={handleLogin} themeColor="furlong-red" />;
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] font-sans flex text-slate-900 selection:bg-furlong-red selection:text-white">
+    // Main Container: Flex row to handle Sidebar + Content properly without fixed margin hacks
+    <div className="flex h-screen w-full bg-[#F8F9FA] font-sans text-slate-900 selection:bg-furlong-red selection:text-white overflow-hidden">
+      
       <Sidebar currentView={currentView} onNavigate={setCurrentView} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
-      <main className="md:ml-72 p-6 md:p-8 flex-1 overflow-y-auto h-screen w-full relative">
-        <header className="flex flex-col xl:flex-row justify-between xl:items-center mb-8 gap-6 animate-in fade-in slide-in-from-top-4">
+      {/* Content Area: Flex-1 to take remaining space, relative for positioning, internal scroll */}
+      <main className="flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8 relative w-full">
+        
+        <header className="flex flex-col xl:flex-row justify-between xl:items-center mb-8 gap-6 animate-in fade-in slide-in-from-top-4 shrink-0">
           <div className="flex items-center gap-4">
              <button className="md:hidden p-2 bg-white shadow-polaris border border-slate-200 rounded text-slate-600" onClick={() => setIsSidebarOpen(true)}><Menu size={24} /></button>
              <div>
@@ -248,7 +202,7 @@ function App() {
           </div>
         </header>
         
-        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex-1">
             {currentView === 'settings' ? <SettingsView currentUser={currentUser} currentTheme={theme} onUpdateTheme={setTheme} onLogout={() => { setCurrentUser(null); logAction(currentUser, 'LOGIN', 'Sistema', 'Logout'); }} /> : 
              currentView === 'reports' ? <ReportsView data={records} onRefreshData={refreshSystem} /> : 
              currentView === 'expenses' ? <ExpensesView expenses={filteredExpenses} onExpensesUpdated={setExpenses} onViewDetail={(title, records) => setModalData({ isOpen: true, title, type: 'list', dataType: 'expense', records })} theme={theme} /> : 
@@ -261,7 +215,7 @@ function App() {
                     {importTab === 'process' ? <ImportView files={files} status={status} onFileSelect={(e) => e.target.files && setFiles(p => [...p, ...Array.from(e.target.files!)])} onRemoveFile={(idx) => setFiles(p => p.filter((_, i) => i !== idx))} onProcess={handleProcess} theme={theme} fleetDbCount={fleetDb.length} onDbUpload={handleDbSelect} /> : <ConverterView convertFile={convertFile} isConverting={isConverting} onFileSelect={setConvertFile} onConvert={handleConversion} onClearFile={() => setConvertFile(null)} theme={theme} />}
                 </div>
             ) : (
-                <div className="space-y-8 pb-12">
+                <div className="space-y-8 pb-12 w-full max-w-full">
                     {filteredRecords.length > 0 ? (
                         <>
                             <Stats data={filteredRecords} onCardDoubleClick={(type) => { let filtered = [...filteredRecords], title = ""; if(type==='total') title="General"; else if(type==='trucks') {title="Patentes"; filtered.sort((a,b)=>a.patente.localeCompare(b.patente));} else if(type==='owners') {title="Dueños"; filtered.sort((a,b)=>a.dueno.localeCompare(b.dueno));} setModalData({ isOpen: true, title, type: 'list', dataType: 'truck', records: filtered }); }} />

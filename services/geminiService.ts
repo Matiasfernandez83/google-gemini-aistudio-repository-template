@@ -1,3 +1,4 @@
+
 import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -48,6 +49,15 @@ const cleanAndParseJSON = (text: string): any => {
     }
 };
 
+// --- VALIDATION HELPER ---
+const getApiKey = (): string => {
+    const key = process.env.API_KEY;
+    if (!key || key.trim() === '') {
+        throw new Error("FALTA API KEY: Crea un archivo .env con API_KEY=tu_clave_gemini");
+    }
+    return key;
+};
+
 // --- FALLBACK METHOD (DIRECT REST API) ---
 const generateContentFallback = async (apiKey: string, prompt: string, contents: any[], schema?: any) => {
     console.warn("Using Fallback REST API for generation...");
@@ -80,7 +90,8 @@ const generateContentFallback = async (apiKey: string, prompt: string, contents:
     });
 
     if (!response.ok) {
-        throw new Error(`Fallback API Error: ${response.status} ${response.statusText}`);
+        const errText = await response.text();
+        throw new Error(`Error API (${response.status}): ${errText}`);
     }
 
     const json = await response.json();
@@ -93,11 +104,8 @@ export const processDocuments = async (
   contents: { mimeType: string; data: string }[],
   retries = 3
 ): Promise<TruckRecord[]> => {
-  // ... existing implementation for trucks ...
-  // Keeping this concise as requested, focusing on changes for Cards
   let lastError: any;
-  const apiKey = process.env.API_KEY || "";
-  if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
+  const apiKey = getApiKey();
 
   const schema = getResponseSchema();
   const prompt = `Actúa como un sistema experto de ERP. Analiza doc. Extrae: TAG, Patente, Dueño, Valor, Concepto. JSON array.`;
@@ -115,6 +123,7 @@ export const processDocuments = async (
             });
             textResult = response.text || "[]";
         } catch (e) {
+            console.warn("SDK Error, using fallback:", e);
             textResult = await generateContentFallback(apiKey, prompt, contents, schema);
         }
         const data = cleanAndParseJSON(textResult);
@@ -142,8 +151,7 @@ export const processCardExpenses = async (
     retries = 3
 ): Promise<ProcessedStatementResult> => {
     let lastError: any;
-    const apiKey = process.env.API_KEY || "";
-    if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
+    const apiKey = getApiKey();
     
     // Expanded keywords for extraction
     const keywords = [
@@ -265,9 +273,7 @@ export const processCardExpenses = async (
 export const convertPdfToData = async (
     contents: { mimeType: string; data: string }[]
 ): Promise<any[]> => {
-    // ... existing implementation ...
-    const apiKey = process.env.API_KEY || "";
-    if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
+    const apiKey = getApiKey();
     const prompt = `Analiza PDF. Extrae tabla principal. JSON array.`;
     try {
         let textResult = "";

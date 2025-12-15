@@ -52,7 +52,7 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-polaris border border-slate-200 flex flex-col overflow-hidden">
+    <div className="bg-white rounded-xl shadow-polaris border border-slate-200 flex flex-col overflow-hidden w-full max-w-full">
       {/* HEADER TOOLBAR */}
       <div className="p-5 border-b border-slate-200 bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
@@ -80,17 +80,17 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
         </div>
       </div>
 
-      {/* TABLE */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
+      {/* TABLE CONTAINER: Ensure max width is respected */}
+      <div className="overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[600px] md:min-w-0">
           <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-bold text-slate-500 tracking-wider">
+            <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-bold text-slate-500 tracking-wider whitespace-nowrap">
               <th className="px-6 py-4 w-10 text-center"><input type="checkbox" onChange={toggleSelectAll} checked={filteredData.length > 0 && selectedIds.length === filteredData.length} className="rounded border-slate-300 text-furlong-red focus:ring-furlong-red" /></th>
               <th className="px-6 py-4">Patente / Equipo</th>
               <th className="px-6 py-4 hidden md:table-cell">Responsable</th>
-              <th className="px-6 py-4 hidden lg:table-cell">Dispositivo</th>
+              <th className="px-6 py-4 hidden xl:table-cell">Dispositivo</th>
               <th className="px-6 py-4 text-center">Estado</th>
-              <th className="px-6 py-4 hidden xl:table-cell">Fecha</th>
+              <th className="px-6 py-4 hidden lg:table-cell">Fecha</th>
               <th className="px-6 py-4 text-right">Monto</th>
               <th className="px-6 py-4 text-center">Acción</th>
             </tr>
@@ -99,25 +99,25 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
             {paginatedData.length > 0 ? paginatedData.map((item) => (
                 <tr key={item.id} className={`hover:bg-slate-50 transition-colors group cursor-pointer ${selectedIds.includes(item.id) ? 'bg-red-50/20' : ''}`} onDoubleClick={() => onRowDoubleClick?.(item)}>
                   <td className="px-6 py-4 text-center" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelectRow(item.id)} className="rounded border-slate-300 text-furlong-red focus:ring-furlong-red" /></td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 whitespace-nowrap">
                      <div className="flex items-center gap-2">
                          <span className="font-bold text-slate-800 text-sm">{item.patente || '---'}</span>
                          {item.equipo && <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold border border-slate-200">{item.equipo}</span>}
                      </div>
-                     <div className="md:hidden text-xs text-slate-500 mt-1 truncate">{item.dueno}</div>
+                     <div className="md:hidden text-xs text-slate-500 mt-1 truncate max-w-[120px]">{item.dueno}</div>
                   </td>
-                  <td className="px-6 py-4 text-slate-600 font-medium text-sm hidden md:table-cell truncate max-w-[200px]">{item.dueno || '---'}</td>
-                  <td className="px-6 py-4 hidden lg:table-cell">
+                  <td className="px-6 py-4 text-slate-600 font-medium text-sm hidden md:table-cell truncate max-w-[150px] lg:max-w-[250px]" title={item.dueno}>{item.dueno || '---'}</td>
+                  <td className="px-6 py-4 hidden xl:table-cell whitespace-nowrap">
                         {item.tag ? <div className="flex items-center gap-1.5 text-slate-500 text-xs font-mono"><Tag size={12}/> {item.tag}</div> : <span className="text-slate-300">-</span>}
                   </td>
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-6 py-4 text-center whitespace-nowrap">
                       {item.isVerified ? 
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wide">Verificado</span> : 
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 uppercase tracking-wide">Pendiente</span>
                       }
                   </td>
-                  <td className="px-6 py-4 hidden xl:table-cell text-xs text-slate-500 font-mono">{item.fecha || '-'}</td>
-                  <td className="px-6 py-4 text-right font-bold text-slate-800 text-sm">
+                  <td className="px-6 py-4 hidden lg:table-cell text-xs text-slate-500 font-mono whitespace-nowrap">{item.fecha || '-'}</td>
+                  <td className="px-6 py-4 text-right font-bold text-slate-800 text-sm whitespace-nowrap">
                     {new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(item.valor)}
                   </td>
                    <td className="px-6 py-4 text-center">
