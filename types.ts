@@ -1,16 +1,4 @@
 
-
-// Global definition for process.env to satisfy TypeScript in browser
-declare global {
-  interface Window {
-    process: {
-      env: {
-        [key: string]: string | undefined;
-      };
-    };
-  }
-}
-
 export interface TruckRecord {
   id: string;
   patente: string;
