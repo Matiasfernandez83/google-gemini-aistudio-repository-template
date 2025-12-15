@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -98,37 +97,38 @@
       }
     </style>
     <script>
+      // Polyfill simple para process.env
       window.process = window.process || { env: {} };
       window.global = window;
+      
+      // Error handler global
       window.onerror = function(msg, url, line, col, error) {
+        // Ignorar errores benignos de fetch o módulos interrumpidos
         if (msg.includes('Failed to fetch') || msg.includes('Importing a module script failed')) return false;
+        
         var errDiv = document.getElementById('global-error');
         var loader = document.getElementById('app-loader');
         if (errDiv) {
             errDiv.style.display = 'block';
-            errDiv.innerHTML = '<h1>Error Crítico</h1><pre>' + msg + '</pre><button onclick="window.location.reload()" style="padding:10px; background:#E30613; color:#fff; border:none; border-radius:4px; margin-top:20px; cursor:pointer;">Recargar Sistema</button>';
+            errDiv.innerHTML = '<h2 style="font-size:1.5rem;font-weight:bold;margin-bottom:1rem">Error de Carga</h2><pre style="background:#f3f4f6;padding:1rem;border-radius:0.5rem;overflow:auto">' + msg + '</pre><button onclick="window.location.reload()" style="padding:10px 20px; background:#E30613; color:#fff; border:none; border-radius:4px; margin-top:20px; cursor:pointer; font-weight:bold;">Recargar Sistema</button>';
         }
         if (loader) loader.style.display = 'none';
         return false;
       };
     </script>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@18.2.0",
-    "react/": "https://esm.sh/react@18.2.0/",
-    "react-dom": "https://esm.sh/react-dom@18.2.0",
-    "react-dom/": "https://esm.sh/react-dom@18.2.0/",
-    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
-    "lucide-react": "https://esm.sh/lucide-react@0.344.0?deps=react@18.2.0",
-    "clsx": "https://esm.sh/clsx@2.1.1",
-    "xlsx": "https://esm.sh/xlsx@0.18.5",
-    "recharts": "https://esm.sh/recharts@2.12.7?deps=react@18.2.0,react-dom@18.2.0",
-    "jspdf": "https://esm.sh/jspdf@2.5.1",
-    "jspdf-autotable": "https://esm.sh/jspdf-autotable@3.8.2?deps=jspdf@2.5.1",
-    "vite": "https://esm.sh/vite@^5.1.4",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^4.2.1"
+    "vite": "https://esm.sh/vite@^7.2.7",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+    "recharts": "https://esm.sh/recharts@^3.5.1",
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
+    "clsx": "https://esm.sh/clsx@^2.1.1"
   }
 }
 </script>

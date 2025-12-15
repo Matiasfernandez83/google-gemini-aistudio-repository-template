@@ -3,14 +3,13 @@ import react from '@vitejs/plugin-react';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Carga las variables de entorno para que estén disponibles en process.env durante el build
   const env = loadEnv(mode, process.cwd(), '');
   
   return {
     plugins: [react()],
     define: {
-      // Inyección segura de la API KEY para producción
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      // Inyección robusta: busca en env local o en el proceso del sistema
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY || '')
     },
     server: {
       host: '0.0.0.0',

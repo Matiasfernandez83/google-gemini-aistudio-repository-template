@@ -1,18 +1,7 @@
-
 import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
+import { GoogleGenAI } from "@google/genai";
 
 // --- HELPERS ---
-
-const getApiKey = () => {
-    let apiKey: string | undefined = undefined;
-    try {
-        if (typeof process !== 'undefined' && process.env) apiKey = process.env.API_KEY;
-        if (!apiKey && typeof window !== 'undefined' && (window as any).process?.env) apiKey = (window as any).process.env.API_KEY;
-    } catch (e) { console.warn(e); }
-    
-    if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
-    return apiKey;
-};
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -107,7 +96,9 @@ export const processDocuments = async (
   // ... existing implementation for trucks ...
   // Keeping this concise as requested, focusing on changes for Cards
   let lastError: any;
-  const apiKey = getApiKey();
+  const apiKey = process.env.API_KEY || "";
+  if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
+
   const schema = getResponseSchema();
   const prompt = `Actúa como un sistema experto de ERP. Analiza doc. Extrae: TAG, Patente, Dueño, Valor, Concepto. JSON array.`;
 
@@ -115,7 +106,6 @@ export const processDocuments = async (
       try {
         let textResult = "";
         try {
-            const { GoogleGenAI } = await import("@google/genai");
             const ai = new GoogleGenAI({ apiKey });
             const sdkParts = contents.map(c => c.mimeType === 'text/plain' ? { text: c.data } : { inlineData: { mimeType: c.mimeType, data: c.data } });
             const response = await ai.models.generateContent({
@@ -152,7 +142,8 @@ export const processCardExpenses = async (
     retries = 3
 ): Promise<ProcessedStatementResult> => {
     let lastError: any;
-    const apiKey = getApiKey();
+    const apiKey = process.env.API_KEY || "";
+    if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
     
     // Expanded keywords for extraction
     const keywords = [
@@ -229,7 +220,6 @@ export const processCardExpenses = async (
             let textResult = "";
 
             try {
-                const { GoogleGenAI } = await import("@google/genai");
                 const ai = new GoogleGenAI({ apiKey });
                 
                 const sdkParts = contents.map(c => {
@@ -276,12 +266,12 @@ export const convertPdfToData = async (
     contents: { mimeType: string; data: string }[]
 ): Promise<any[]> => {
     // ... existing implementation ...
-    const apiKey = getApiKey();
+    const apiKey = process.env.API_KEY || "";
+    if (!apiKey) throw new Error("CRÍTICO: API_KEY no detectada.");
     const prompt = `Analiza PDF. Extrae tabla principal. JSON array.`;
     try {
         let textResult = "";
         try {
-            const { GoogleGenAI } = await import("@google/genai");
             const ai = new GoogleGenAI({ apiKey });
             const sdkParts = contents.map(c => ({ inlineData: { mimeType: c.mimeType, data: c.data } }));
             const response = await ai.models.generateContent({ model: "gemini-2.5-flash", contents: { parts: [...sdkParts, { text: prompt }] }, config: { responseMimeType: "application/json" } });
