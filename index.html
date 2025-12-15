@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -97,10 +98,6 @@
       }
     </style>
     <script>
-      // Polyfill simple para process.env
-      window.process = window.process || { env: {} };
-      window.global = window;
-      
       // Error handler global
       window.onerror = function(msg, url, line, col, error) {
         // Ignorar errores benignos de fetch o módulos interrumpidos

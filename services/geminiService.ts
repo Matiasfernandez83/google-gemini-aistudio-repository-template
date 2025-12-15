@@ -2,6 +2,9 @@
 import { TruckRecord, ExpenseRecord, CardStatement } from "../types";
 import { GoogleGenAI, Type } from "@google/genai";
 
+// Declaración para TypeScript de la variable inyectada por Vite
+declare const __API_KEY__: string;
+
 // --- HELPERS ---
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -51,12 +54,12 @@ const cleanAndParseJSON = (text: string): any => {
 
 // --- VALIDATION HELPER ---
 const getApiKey = (): string => {
-    // 1. Intentar leer la variable inyectada por Vite
-    const key = process.env.API_KEY;
+    // Usamos la variable global definida en vite.config.ts
+    // Esto evita depender de process.env que causa conflictos en el navegador
+    const key = typeof __API_KEY__ !== 'undefined' ? __API_KEY__ : '';
 
-    // 2. Validación estricta
     if (!key || key.trim() === '') {
-        console.error("API_KEY vacía. Process.env:", process.env);
+        console.error("API Key vacía.");
         throw new Error("FALTA API KEY: Verifica haber creado el archivo .env y REINICIADO la terminal (npm run dev).");
     }
     return key;
