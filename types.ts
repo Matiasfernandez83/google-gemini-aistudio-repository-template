@@ -8,6 +8,13 @@ declare global {
       };
     };
   }
+  
+  // Ensure process is defined globally for direct access in code
+  var process: {
+    env: {
+      [key: string]: string | undefined;
+    };
+  };
 }
 
 export interface TruckRecord {
