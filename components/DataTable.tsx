@@ -86,7 +86,8 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase font-bold text-slate-500 tracking-wider whitespace-nowrap">
               <th className="px-6 py-4 w-10 text-center"><input type="checkbox" onChange={toggleSelectAll} checked={filteredData.length > 0 && selectedIds.length === filteredData.length} className="rounded border-slate-300 text-furlong-red focus:ring-furlong-red" /></th>
-              <th className="px-6 py-4">Patente / Equipo</th>
+              <th className="px-6 py-4">Patente</th>
+              <th className="px-6 py-4">Equipo</th>
               <th className="px-6 py-4 hidden md:table-cell">Responsable</th>
               <th className="px-6 py-4 hidden xl:table-cell">Dispositivo</th>
               <th className="px-6 py-4 text-center">Estado</th>
@@ -102,9 +103,11 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                   <td className="px-6 py-4 whitespace-nowrap">
                      <div className="flex items-center gap-2">
                          <span className="font-bold text-slate-800 text-sm">{item.patente || '---'}</span>
-                         {item.equipo && <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold border border-slate-200">{item.equipo}</span>}
                      </div>
                      <div className="md:hidden text-xs text-slate-500 mt-1 truncate max-w-[120px]">{item.dueno}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                     {item.equipo ? <span className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold border border-slate-200">{item.equipo}</span> : <span className="text-slate-300">-</span>}
                   </td>
                   <td className="px-6 py-4 text-slate-600 font-medium text-sm hidden md:table-cell truncate max-w-[150px] lg:max-w-[250px]" title={item.dueno}>{item.dueno || '---'}</td>
                   <td className="px-6 py-4 hidden xl:table-cell whitespace-nowrap">
@@ -129,7 +132,7 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                   </td>
                 </tr>
               )) : (
-                <tr><td colSpan={8} className="px-6 py-12 text-center text-slate-400">No hay registros coincidentes.</td></tr>
+                <tr><td colSpan={9} className="px-6 py-12 text-center text-slate-400">No hay registros coincidentes.</td></tr>
             )}
           </tbody>
         </table>
@@ -138,10 +141,32 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
       {/* FOOTER */}
       <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4 text-xs font-medium text-slate-600">
             <div>Mostrando <span className="font-bold text-slate-900">{filteredData.length > 0 ? startItemIndex : 0}-{endItemIndex}</span> de <span className="font-bold text-slate-900">{filteredData.length}</span></div>
-            <div className="flex items-center gap-4">
-                <select value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="bg-white border border-slate-300 py-1 px-2 rounded focus:outline-none focus:border-furlong-red">
-                    <option value={10}>10 filas</option><option value={20}>20 filas</option><option value={50}>50 filas</option>
-                </select>
+            <div className="flex items-center gap-4 flex-wrap justify-end">
+                <div className="flex items-center gap-2">
+                    <span className="hidden sm:inline">Filas:</span>
+                    <select value={itemsPerPage} onChange={(e) => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }} className="bg-white border border-slate-300 py-1 px-2 rounded focus:outline-none focus:border-furlong-red cursor-pointer">
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                    </select>
+                </div>
+                
+                {/* Selector de Página Directo */}
+                <div className="flex items-center gap-2">
+                     <span className="hidden sm:inline">Ir a:</span>
+                     <select 
+                        value={currentPage} 
+                        onChange={(e) => setCurrentPage(Number(e.target.value))}
+                        className="bg-white border border-slate-300 py-1 px-2 rounded focus:outline-none focus:border-furlong-red cursor-pointer w-16"
+                        disabled={totalPages <= 1}
+                     >
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+                            <option key={num} value={num}>{num}</option>
+                        ))}
+                     </select>
+                </div>
+
                 <div className="flex gap-1">
                     <button onClick={() => setCurrentPage(p => p - 1)} disabled={currentPage === 1} className="p-1.5 bg-white border border-slate-300 rounded hover:text-furlong-red disabled:opacity-50"><ChevronLeft size={16}/></button>
                     <button onClick={() => setCurrentPage(p => p + 1)} disabled={currentPage === totalPages} className="p-1.5 bg-white border border-slate-300 rounded hover:text-furlong-red disabled:opacity-50"><ChevronRight size={16}/></button>
