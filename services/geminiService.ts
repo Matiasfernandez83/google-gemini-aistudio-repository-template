@@ -51,9 +51,13 @@ const cleanAndParseJSON = (text: string): any => {
 
 // --- VALIDATION HELPER ---
 const getApiKey = (): string => {
+    // 1. Intentar leer la variable inyectada por Vite
     const key = process.env.API_KEY;
+
+    // 2. Validación estricta
     if (!key || key.trim() === '') {
-        throw new Error("FALTA API KEY: Crea un archivo .env con API_KEY=tu_clave_gemini");
+        console.error("API_KEY vacía. Process.env:", process.env);
+        throw new Error("FALTA API KEY: Verifica haber creado el archivo .env y REINICIADO la terminal (npm run dev).");
     }
     return key;
 };
@@ -105,7 +109,13 @@ export const processDocuments = async (
   retries = 3
 ): Promise<TruckRecord[]> => {
   let lastError: any;
-  const apiKey = getApiKey();
+  let apiKey = "";
+  
+  try {
+      apiKey = getApiKey();
+  } catch (e: any) {
+      throw e; // Relanzar inmediatamente si falta la key
+  }
 
   const schema = getResponseSchema();
   const prompt = `Actúa como un sistema experto de ERP. Analiza doc. Extrae: TAG, Patente, Dueño, Valor, Concepto. JSON array.`;
@@ -151,7 +161,13 @@ export const processCardExpenses = async (
     retries = 3
 ): Promise<ProcessedStatementResult> => {
     let lastError: any;
-    const apiKey = getApiKey();
+    let apiKey = "";
+
+    try {
+        apiKey = getApiKey();
+    } catch (e: any) {
+        throw e;
+    }
     
     // Expanded keywords for extraction
     const keywords = [
