@@ -16,7 +16,7 @@ import { RefreshCw, Menu, Calendar, Trash2, Database, ArrowRightLeft } from 'luc
 import { TruckRecord, ExpenseRecord, ProcessingStatus, FileType, FleetRecord, View, UploadedFile, ModalData, User, ThemeSettings } from './types';
 import { parseExcelToCSV, fileToBase64, parseExcelToRowArray } from './utils/excelParser';
 import { processDocuments, convertPdfToData } from './services/geminiService';
-import { getRecords, saveRecords, getFleet, saveFleet, saveFiles, clearRecords, getExpenses, deleteRecords, logAction, getFileById } from './utils/storage';
+import { getRecords, saveRecords, getFleet, saveFleet, saveFiles, clearRecords, getExpenses, deleteRecords, logAction, getFileById, getTheme } from './utils/storage';
 import clsx from 'clsx';
 
 function App() {
@@ -39,6 +39,16 @@ function App() {
   const [recordsToDelete, setRecordsToDelete] = useState<string[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Load theme from storage on mount
+  useEffect(() => {
+    const loadTheme = async () => {
+        const savedTheme = await getTheme();
+        if (savedTheme) setTheme(savedTheme);
+    };
+    loadTheme();
+    refreshSystem();
+  }, []);
+
   const refreshSystem = async () => {
     setIsRefreshing(true);
     try {
@@ -47,7 +57,6 @@ function App() {
         try { const savedFleet = await getFleet(); setFleetDb(savedFleet || []); } catch (e) {}
     } catch (e) { console.error(e); } finally { setTimeout(() => setIsRefreshing(false), 500); }
   };
-  useEffect(() => { refreshSystem(); }, []);
 
   const filteredRecords = useMemo(() => {
     let res = records;
@@ -81,21 +90,23 @@ function App() {
     const newRecordsAcc: TruckRecord[] = []; 
     const filesToSaveAcc: UploadedFile[] = [];
     
+    // Check processing mode
+    const isFastMode = theme.processingMode === 'fast';
+    const delayTime = isFastMode ? 0 : 6000; // 0ms for Paid, 6000ms for Free
+
     try {
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             
-            // --- ANTI-THROTTLING PAUSE ---
-            // Si hay más de 1 archivo y no es el primero, esperamos para no saturar la API
-            if (i > 0 && files.length > 1) {
-                 await new Promise(r => setTimeout(r, 6000)); // Espera de 6 segundos entre archivos
+            // --- ANTI-THROTTLING PAUSE (Conditional) ---
+            if (i > 0 && files.length > 1 && delayTime > 0) {
+                 await new Promise(r => setTimeout(r, delayTime)); 
             }
 
             try {
                 const fileId = `file-${Date.now()}-${Math.random()}`; 
                 let contentData = '', mimeType = '';
                 
-                // Mejorada detección de PDF: Verifica MIME type O extensión del nombre
                 const isPdf = file.type === FileType.PDF || file.name.toLowerCase().endsWith('.pdf');
                 
                 if (isPdf) { 
@@ -118,8 +129,8 @@ function App() {
                 setStatus(prev => ({ ...prev, processedCount: (prev.processedCount || 0) + 1 }));
             } catch (err: any) { 
                 failedFiles.push(`${file.name}: ${err.message}`); 
-                // Si falla, esperamos extra por si fue un rate limit no capturado
-                await new Promise(r => setTimeout(r, 2000));
+                // Only wait on error if we are on free mode or if it's a hard rate limit
+                if (!isFastMode) await new Promise(r => setTimeout(r, 2000));
             }
         }
 
@@ -287,7 +298,18 @@ function App() {
         </header>
         
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 flex-1">
-            {currentView === 'settings' ? <SettingsView currentUser={currentUser} currentTheme={theme} onUpdateTheme={setTheme} onLogout={() => { setCurrentUser(null); logAction(currentUser, 'LOGIN', 'Sistema', 'Logout'); }} /> : 
+            {currentView === 'settings' ? (
+                <SettingsView 
+                    currentUser={currentUser} 
+                    currentTheme={theme} 
+                    onUpdateTheme={(newTheme) => {
+                        setTheme(newTheme);
+                        // Persist theme
+                        import('./utils/storage').then(m => m.saveTheme(newTheme));
+                    }} 
+                    onLogout={() => { setCurrentUser(null); logAction(currentUser, 'LOGIN', 'Sistema', 'Logout'); }} 
+                />
+             ) : 
              currentView === 'reports' ? <ReportsView data={records} onRefreshData={refreshSystem} /> : 
              currentView === 'expenses' ? <ExpensesView expenses={filteredExpenses} onExpensesUpdated={setExpenses} onViewDetail={(title, records) => setModalData({ isOpen: true, title, type: 'list', dataType: 'expense', records })} theme={theme} /> : 
              currentView === 'import' ? (

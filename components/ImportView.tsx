@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileText, FileSpreadsheet, X, Loader2, AlertCircle, CheckCircle2, Database, Clock, ArrowRight } from 'lucide-react';
+import { UploadCloud, FileText, FileSpreadsheet, X, Loader2, AlertCircle, CheckCircle2, Database, Clock, ArrowRight, Zap } from 'lucide-react';
 import { ThemeSettings, ProcessingStatus } from '../types';
 import clsx from 'clsx';
 
@@ -53,12 +53,18 @@ export const ImportView: React.FC<ImportViewProps> = ({
             
             {/* LEFT COLUMN: UPLOAD ZONE */}
             <div className="lg:col-span-2 bg-white rounded-xl shadow-polaris border border-slate-200 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                        <UploadCloud size={20} className="text-furlong-red"/>
-                        Carga de Documentación
-                    </h3>
-                    <p className="text-sm text-slate-500 mt-1">Sube PDFs de resumen o planillas Excel de control.</p>
+                <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <UploadCloud size={20} className="text-furlong-red"/>
+                            Carga de Documentación
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Sube PDFs de resumen o planillas Excel de control.</p>
+                    </div>
+                    {/* Visual Indicator for grouped invoices */}
+                    <div className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold border border-blue-100 uppercase tracking-wide">
+                        <Zap size={12} /> Detecta Facturas Agrupadas
+                    </div>
                 </div>
                 
                 <div className="p-6">

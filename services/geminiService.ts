@@ -132,31 +132,30 @@ export const processDocuments = async (
   const apiKey = getApiKey();
   const schema = getResponseSchema();
 
-  const prompt = `Analiza el documento como un experto logístico.
-  Objetivo: Extraer filas de tablas de movimientos, viajes o peajes.
+  // PROMPT OPTIMIZADO PARA FACTURAS AGRUPADAS (Autopistas del Sol / CEAMSE)
+  const prompt = `Analiza el documento. Objetivo: Extraer filas de PEAJES y PASADAS.
 
-  IMPORTANTE - LECTURA DE FACTURAS AGRUPADAS (Ej: Autopistas, CEAMSE):
-  En muchas facturas, el número de TAG (ej: SI9099565380) aparece en una línea SOLA (sin monto), y debajo aparecen las filas de peajes/pasadas con sus importes.
+  ATENCIÓN ESPECIAL AL FORMATO DE LISTA (CASO 'AUTOPISTAS DEL SOL' / 'CEAMSE'):
+  En estos documentos, a veces el Número de TAG aparece solo en una línea (sin precio), actuando como "Título" para los ítems que siguen debajo.
+
+  REGLA DE EXTRACCIÓN AGRUPADA:
+  1. Escanea línea por línea.
+  2. Si encuentras un código alfanumérico (ej: "SI9099565380" o similar) que está SOLO en la línea o no tiene importe monetario asociado:
+     -> GUÁRDALO en memoria como el "TAG VIGENTE".
+  3. Si las líneas siguientes contienen una descripción (ej: "BUEN AYRE", "PASADAS", "TRANSACCIONES") y un MONTO ($):
+     -> Son ítems válidos.
+     -> ASÍGNALES el "TAG VIGENTE" que guardaste en el paso anterior.
+  4. Si encuentras otro código de TAG solo, actualiza el "TAG VIGENTE" y repite.
+
+  CAMPOS A EXTRAER:
+  - Patente (Si no está explicita, busca códigos de vehículo o pon "PENDIENTE").
+  - Dueño (Si no está explicito, pon "Desconocido").
+  - Valor (Monto numérico, columna Importe).
+  - Concepto (Descripción del movimiento).
+  - Tag (El código del dispositivo, ya sea de la misma línea o del encabezado agrupador).
+  - Fecha (YYYY-MM-DD).
   
-  REGLA DE CONTEXTO:
-  1. Si ves un código alfanumérico largo (TAG) en una línea sin valor monetario, GUÁRDALO como "Tag Actual".
-  2. Lee las líneas siguientes que tienen descripción (ej: "BUEN AYRE", "PASADAS") y MONTO.
-  3. A esas líneas de monto, ASÍGNALES el "Tag Actual" que leíste arriba.
-  4. Repite esto hasta que encuentres un nuevo TAG.
-  
-  INTELIGENCIA DEDUCTIVA GENERAL:
-  - Columna con formato monetario ($1.000, 1000.00) -> ES EL "VALOR".
-  - Columna con formato fecha (DD/MM/YYYY o YYYY-MM-DD) -> ES LA "FECHA".
-  
-  Mapeo de Campos Requerido:
-  - Patente (Si no está clara, pon "PENDIENTE").
-  - Dueño (Si falta, pon "Desconocido").
-  - Valor (OBLIGATORIO: Debe ser numérico).
-  - Concepto (Descripción del peaje/pasada).
-  - Tag (El dispositivo asociado a este cobro).
-  - Fecha.
-  
-  Devuelve un Array JSON plano con todas las transacciones encontradas (uniendo el Tag padre con sus filas hijas).`;
+  Salida: Array JSON plano con todos los movimientos detectados.`;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
       try {
