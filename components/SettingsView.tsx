@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { User, ThemeSettings, AuditLog } from '../types';
 import { getUsers, saveUser, checkUserEmailExists, getAuditLogs } from '../utils/storage';
-import { UserPlus, Palette, LogOut, Power, Maximize, Type, Users, Save, Zap, Coffee, ShieldAlert, Activity, CheckCircle2 } from 'lucide-react';
+import { UserPlus, Palette, LogOut, Power, Maximize, Type, Users, Save, Zap, Coffee, ShieldAlert, Activity, CheckCircle2, UserCog, Key, Lock, Shield } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SettingsViewProps {
@@ -15,11 +15,19 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, currentTheme, onUpdateTheme, onLogout }) => {
     const [users, setUsers] = useState<User[]>([]);
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-    const [activeTab, setActiveTab] = useState<'general' | 'users' | 'audit'>('general');
+    const [activeTab, setActiveTab] = useState<'general' | 'profile' | 'users' | 'audit'>('general');
     
-    // User Form State
+    // User Form State (New User)
     const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' as 'admin'|'user' });
     const [formError, setFormError] = useState<string | null>(null);
+
+    // Profile State (Change Own Password)
+    const [profilePass, setProfilePass] = useState({ current: '', new: '', confirm: '' });
+    const [profileMsg, setProfileMsg] = useState<{type: 'success'|'error', text: string} | null>(null);
+
+    // Admin Reset Password State
+    const [resetTarget, setResetTarget] = useState<User | null>(null);
+    const [adminNewPass, setAdminNewPass] = useState('');
 
     // Theme options
     const colors: ThemeSettings['primaryColor'][] = ['blue', 'green', 'purple', 'slate', 'orange'];
@@ -52,25 +60,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
         e.preventDefault();
         setFormError(null);
 
-        // Validation 1: Empty Fields
         if (!newUser.name || !newUser.email || !newUser.password) {
             setFormError("Todos los campos son obligatorios.");
             return;
         }
-
-        // Validation 2: Email Format
         if (!validateEmail(newUser.email)) {
             setFormError("El formato del correo electrónico es inválido.");
             return;
         }
-
-        // Validation 3: Password Strength
         if (newUser.password.length < 6) {
             setFormError("La contraseña debe tener al menos 6 caracteres.");
             return;
         }
-
-        // Validation 4: Unique Email
         const exists = await checkUserEmailExists(newUser.email);
         if (exists) {
             setFormError("Este correo electrónico ya está registrado.");
@@ -94,6 +95,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
         alert('Usuario creado correctamente');
     };
 
+    const handleChangeOwnPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setProfileMsg(null);
+
+        if (profilePass.new.length < 6) {
+            setProfileMsg({ type: 'error', text: 'La nueva contraseña debe tener al menos 6 caracteres.' });
+            return;
+        }
+
+        if (profilePass.new !== profilePass.confirm) {
+            setProfileMsg({ type: 'error', text: 'Las contraseñas nuevas no coinciden.' });
+            return;
+        }
+
+        // Verify current password (simple check against current session object, in real app check DB)
+        if (profilePass.current !== currentUser.password) {
+             setProfileMsg({ type: 'error', text: 'La contraseña actual es incorrecta.' });
+             return;
+        }
+
+        const updatedUser = { ...currentUser, password: profilePass.new };
+        await saveUser(updatedUser, currentUser);
+        
+        // Update local session user logic would happen in App.tsx via a callback, 
+        // but since we rely on currentUser prop, we just saved to DB. 
+        // Ideally we force a re-login or update parent state.
+        // For this local-first app, updating DB is enough for next login.
+        
+        setProfileMsg({ type: 'success', text: 'Contraseña actualizada. Úsala en tu próximo inicio de sesión.' });
+        setProfilePass({ current: '', new: '', confirm: '' });
+    };
+
+    const handleAdminResetPassword = async () => {
+        if (!resetTarget || !adminNewPass) return;
+        
+        const updatedUser = { ...resetTarget, password: adminNewPass };
+        await saveUser(updatedUser, currentUser); // currentUser is the admin performing the action
+        
+        await loadUsers(); // Refresh list
+        setResetTarget(null);
+        setAdminNewPass('');
+        alert(`Contraseña restablecida para ${updatedUser.name}`);
+    };
+
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen();
@@ -113,22 +158,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
                     <h2 className="text-2xl font-bold text-slate-800">Configuración del Sistema</h2>
                     <p className="text-slate-500 text-sm">Gestiona la plataforma, usuarios y auditoría.</p>
                 </div>
-                {currentUser.role === 'admin' && (
-                    <div className="flex bg-slate-100 p-1 rounded-lg">
-                        <button 
-                            onClick={() => setActiveTab('general')}
-                            className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all", activeTab === 'general' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
-                        >General</button>
-                        <button 
-                             onClick={() => setActiveTab('users')}
-                             className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all", activeTab === 'users' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
-                        >Usuarios</button>
-                        <button 
-                             onClick={() => setActiveTab('audit')}
-                             className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all", activeTab === 'audit' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
-                        >Auditoría</button>
-                    </div>
-                )}
+                <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto">
+                    <button 
+                        onClick={() => setActiveTab('general')}
+                        className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap", activeTab === 'general' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                    >General</button>
+                    <button 
+                        onClick={() => setActiveTab('profile')}
+                        className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap flex items-center gap-1", activeTab === 'profile' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                    ><UserCog size={14}/> Mi Perfil</button>
+                    {currentUser.role === 'admin' && (
+                        <>
+                            <button 
+                                onClick={() => setActiveTab('users')}
+                                className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap", activeTab === 'users' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                            >Usuarios</button>
+                            <button 
+                                onClick={() => setActiveTab('audit')}
+                                className={clsx("px-4 py-1.5 text-sm font-medium rounded-md transition-all whitespace-nowrap", activeTab === 'audit' ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
+                            >Auditoría</button>
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* GENERAL TAB */}
@@ -256,7 +307,87 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
                 </div>
             )}
 
-            {/* USERS TAB */}
+            {/* PROFILE TAB (Change Own Password) - ESTILOS MEJORADOS */}
+            {activeTab === 'profile' && (
+                <div className="max-w-2xl mx-auto">
+                    <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200">
+                        <div className="flex items-center gap-4 mb-8 pb-6 border-b border-slate-200">
+                            <div className={`w-16 h-16 rounded-full bg-${currentTheme.primaryColor}-100 flex items-center justify-center text-${currentTheme.primaryColor}-600 shadow-sm`}>
+                                <UserCog size={32} />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-slate-800">{currentUser.name}</h3>
+                                <p className="text-slate-600 font-medium">{currentUser.email}</p>
+                                <span className="text-xs uppercase font-bold tracking-wider text-slate-400 mt-1 inline-block">{currentUser.role === 'admin' ? 'Administrador' : 'Usuario'}</span>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleChangeOwnPassword} className="space-y-8">
+                            <h4 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                                <Key size={20} className="text-slate-600"/> Cambiar Contraseña
+                            </h4>
+                            
+                            <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 space-y-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-slate-800 uppercase tracking-wide mb-2">Contraseña Actual</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="password" 
+                                            className="w-full px-4 py-3 rounded-lg border-2 border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-0 transition-all shadow-sm font-medium"
+                                            value={profilePass.current}
+                                            onChange={e => setProfilePass({...profilePass, current: e.target.value})}
+                                            placeholder="Ingrese su clave actual"
+                                            required
+                                        />
+                                        <Lock className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-800 uppercase tracking-wide mb-2">Nueva Contraseña</label>
+                                        <input 
+                                            type="password" 
+                                            className="w-full px-4 py-3 rounded-lg border-2 border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-0 transition-all shadow-sm font-medium"
+                                            value={profilePass.new}
+                                            onChange={e => setProfilePass({...profilePass, new: e.target.value})}
+                                            placeholder="Min. 6 caracteres"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-bold text-slate-800 uppercase tracking-wide mb-2">Confirmar Nueva</label>
+                                        <input 
+                                            type="password" 
+                                            className="w-full px-4 py-3 rounded-lg border-2 border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-0 transition-all shadow-sm font-medium"
+                                            value={profilePass.confirm}
+                                            onChange={e => setProfilePass({...profilePass, confirm: e.target.value})}
+                                            placeholder="Repetir contraseña"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {profileMsg && (
+                                <div className={clsx("p-4 rounded-lg text-sm flex items-center gap-3 font-medium border animate-in fade-in", profileMsg.type === 'success' ? "bg-green-50 text-green-800 border-green-200" : "bg-red-50 text-red-800 border-red-200")}>
+                                    {profileMsg.type === 'success' ? <CheckCircle2 size={20}/> : <ShieldAlert size={20}/>}
+                                    {profileMsg.text}
+                                </div>
+                            )}
+
+                            <div className="flex justify-end">
+                                <button type="submit" className={`w-full md:w-auto px-8 py-3.5 bg-${currentTheme.primaryColor}-600 text-white rounded-xl font-bold hover:bg-${currentTheme.primaryColor}-700 shadow-lg shadow-${currentTheme.primaryColor}-200 transition-all flex items-center justify-center gap-2 text-base`}>
+                                    <Save size={18} />
+                                    Actualizar Contraseña
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* USERS TAB (Admin) */}
             {activeTab === 'users' && currentUser.role === 'admin' && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
@@ -318,7 +449,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
                         </form>
                     </div>
 
-                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 relative">
+                        {resetTarget && (
+                            <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex items-center justify-center p-6 rounded-xl animate-in fade-in">
+                                <div className="w-full max-w-sm bg-white p-6 rounded-xl shadow-2xl border border-slate-200">
+                                    <h5 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                        <Shield size={18} className="text-orange-500"/> Resetear Contraseña
+                                    </h5>
+                                    <p className="text-sm text-slate-500 mb-4">Nueva clave para: <span className="font-bold">{resetTarget.name}</span></p>
+                                    
+                                    <input 
+                                        type="text" 
+                                        autoFocus
+                                        className="w-full px-3 py-2 border border-slate-300 rounded mb-4 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                        placeholder="Escribe la nueva contraseña..."
+                                        value={adminNewPass}
+                                        onChange={(e) => setAdminNewPass(e.target.value)}
+                                    />
+                                    
+                                    <div className="flex gap-2 justify-end">
+                                        <button onClick={() => { setResetTarget(null); setAdminNewPass(''); }} className="px-3 py-1.5 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded">Cancelar</button>
+                                        <button onClick={handleAdminResetPassword} className="px-3 py-1.5 text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 rounded">Confirmar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <Users size={18} className="text-slate-500"/> Usuarios Activos
                         </h4>
@@ -328,7 +484,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
                                     <tr>
                                         <th className="px-4 py-2">Usuario</th>
                                         <th className="px-4 py-2">Rol</th>
-                                        <th className="px-4 py-2 text-right">Estado</th>
+                                        <th className="px-4 py-2 text-right">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -344,7 +500,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
                                                 </span>
                                             </td>
                                             <td className="px-4 py-2 text-right">
-                                                <span className="text-green-600 text-xs font-bold">Activo</span>
+                                                <button 
+                                                    onClick={() => setResetTarget(u)}
+                                                    className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 rounded transition-colors"
+                                                    title="Resetear contraseña"
+                                                >
+                                                    <Lock size={16} />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
