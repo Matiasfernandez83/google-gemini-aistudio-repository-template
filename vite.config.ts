@@ -9,19 +9,25 @@ export default defineConfig(({ mode }) => {
   const currentDir = (process as any).cwd ? (process as any).cwd() : '.';
   const env = loadEnv(mode, currentDir, '');
   
-  // Buscar la API Key en orden de prioridad
-  const apiKey = env.VITE_API_KEY || env.API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || '';
+  // -----------------------------------------------------------------------
+  // SI NO ENCUENTRAS EL ARCHIVO .env, PEGA TU CLAVE DE GOOGLE AQUI ABAJO:
+  // EJEMPLO: const MANUAL_KEY = "AIzaSy...";
+  // -----------------------------------------------------------------------
+  const MANUAL_KEY = ""; 
+
+  // Buscar la API Key en orden de prioridad (Manual > .env > Process)
+  const apiKey = MANUAL_KEY || env.VITE_API_KEY || env.API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || '';
 
   if (apiKey) {
-    console.log('\x1b[32m%s\x1b[0m', `✅ API Key detectada durante el build: ${apiKey.substring(0, 5)}...`);
+    console.log('\x1b[32m%s\x1b[0m', `✅ API Key detectada: ${apiKey.substring(0, 5)}...`);
   } else {
-    console.log('\x1b[33m%s\x1b[0m', `⚠️ API Key no detectada en build time. Se intentará leer en runtime.`);
+    console.log('\x1b[33m%s\x1b[0m', `⚠️ API Key no detectada. Edita vite.config.ts y agrégala en MANUAL_KEY.`);
   }
 
   return {
     plugins: [react()],
     define: {
-      // Inyección segura. Si apiKey es vacío, inyecta string vacío.
+      // Inyección segura.
       '__API_KEY__': JSON.stringify(apiKey)
     },
     server: {

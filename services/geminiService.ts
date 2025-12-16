@@ -83,7 +83,7 @@ const getApiKey = (): string => {
     } catch (e) {}
 
     console.error("API Key no encontrada.");
-    throw new Error("FALTA API KEY: Verifica tu configuración.");
+    throw new Error("FALTA API KEY: No se encontró la clave. Por favor, abre el archivo .env que se encuentra en la lista de archivos y coloca tu API Key (VITE_API_KEY=tu_clave).");
 };
 
 // --- FALLBACK METHOD ---

@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { User, ThemeSettings, AuditLog } from '../types';
 import { getUsers, saveUser, checkUserEmailExists, getAuditLogs } from '../utils/storage';
-import { UserPlus, Palette, LogOut, Power, Maximize, Type, Users, Save, Zap, Coffee, ShieldAlert, Activity } from 'lucide-react';
+import { UserPlus, Palette, LogOut, Power, Maximize, Type, Users, Save, Zap, Coffee, ShieldAlert, Activity, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
 
 interface SettingsViewProps {
@@ -138,34 +138,50 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, current
                     <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-100">
                         <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <Zap className={`text-${currentTheme.primaryColor}-500`} />
-                            Optimización de Costos y API
+                            Velocidad de Procesamiento
                         </h3>
+                        <p className="text-sm text-slate-500 mb-4">
+                            Selecciona cómo quieres que trabaje la IA. Si ya configuraste tu clave de Google Cloud, elige la opción derecha.
+                        </p>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* OPCIÓN GRATIS */}
                             <div 
                                 onClick={() => onUpdateTheme({ ...currentTheme, processingMode: 'free' })}
                                 className={clsx(
-                                    "cursor-pointer p-4 rounded-xl border-2 transition-all flex items-start gap-4",
-                                    (!currentTheme.processingMode || currentTheme.processingMode === 'free') ? "border-green-500 bg-green-50" : "border-slate-200 bg-white hover:border-green-200"
+                                    "cursor-pointer p-6 rounded-xl border-2 transition-all relative",
+                                    (!currentTheme.processingMode || currentTheme.processingMode === 'free') ? "border-slate-400 bg-slate-50" : "border-slate-100 bg-white hover:border-slate-200"
                                 )}
                             >
-                                <div className="p-2 bg-green-100 text-green-600 rounded-lg"><Coffee size={24} /></div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800">Modo Gratuito</h4>
-                                    <p className="text-xs text-slate-500 mt-1">Delay de 5s entre archivos. Ideal para evitar límites de la API gratuita.</p>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-slate-200 text-slate-600 rounded-lg"><Coffee size={24} /></div>
+                                    <h4 className="font-bold text-slate-800">Modo Lento (Gratis)</h4>
                                 </div>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    Espera 6 segundos entre cada archivo. Ideal si no has configurado tarjetas en Google.
+                                </p>
+                                {(!currentTheme.processingMode || currentTheme.processingMode === 'free') && (
+                                    <div className="absolute top-4 right-4 text-slate-400"><CheckCircle2 size={24}/></div>
+                                )}
                             </div>
+
+                            {/* OPCIÓN PAGA / RÁPIDA */}
                             <div 
                                 onClick={() => onUpdateTheme({ ...currentTheme, processingMode: 'fast' })}
                                 className={clsx(
-                                    "cursor-pointer p-4 rounded-xl border-2 transition-all flex items-start gap-4",
-                                    currentTheme.processingMode === 'fast' ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-200"
+                                    "cursor-pointer p-6 rounded-xl border-2 transition-all relative",
+                                    currentTheme.processingMode === 'fast' ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200 shadow-lg" : "border-slate-200 bg-white hover:border-blue-300"
                                 )}
                             >
-                                <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Zap size={24} /></div>
-                                <div>
-                                    <h4 className="font-bold text-slate-800">Modo Rápido</h4>
-                                    <p className="text-xs text-slate-500 mt-1">Velocidad máxima (0.5s). Requiere cuenta de facturación en Google Cloud.</p>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><Zap size={24} /></div>
+                                    <h4 className="font-bold text-slate-800">Modo Rápido (Cloud)</h4>
                                 </div>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    <strong>Velocidad Máxima.</strong> Procesa todo al instante. Requiere que hayas puesto la API Key de tu cuenta Google Cloud.
+                                </p>
+                                {currentTheme.processingMode === 'fast' && (
+                                    <div className="absolute top-4 right-4 text-blue-600"><CheckCircle2 size={24}/></div>
+                                )}
                             </div>
                         </div>
                     </div>
