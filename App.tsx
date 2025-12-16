@@ -19,6 +19,9 @@ import { processDocuments, convertPdfToData } from './services/geminiService';
 import { getRecords, saveRecords, getFleet, saveFleet, saveFiles, clearRecords, getExpenses, deleteRecords, logAction, getFileById, getTheme } from './utils/storage';
 import clsx from 'clsx';
 
+// Asegurar que TypeScript reconozca la variable global inyectada por Vite
+declare const __API_KEY__: string;
+
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [theme, setTheme] = useState<ThemeSettings>({ primaryColor: 'slate', fontFamily: 'inter', processingMode: 'free' });

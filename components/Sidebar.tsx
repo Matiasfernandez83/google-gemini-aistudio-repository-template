@@ -102,6 +102,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
 
             {/* Footer Profile */}
             <div className="p-4 border-t border-white/10 bg-[#0a0a0a]">
+                <div className="flex items-center gap-2 text-[10px] font-bold text-green-500 bg-green-500/10 px-3 py-1.5 rounded-full w-fit mb-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+                    SISTEMA ONLINE
+                </div>
                 <div className="flex items-center gap-3 group cursor-pointer p-3 rounded-xl hover:bg-white/5 transition-colors">
                     <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center font-bold text-sm text-white group-hover:ring-2 ring-furlong-red transition-all">
                         AD
@@ -114,6 +118,5 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, isOpe
                 </div>
             </div>
         </div>
-    </>
-  );
+    );
 };

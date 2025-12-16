@@ -11,9 +11,9 @@ export default defineConfig(({ mode }) => {
   
   // -----------------------------------------------------------------------
   // SI NO ENCUENTRAS EL ARCHIVO .env, PEGA TU CLAVE DE GOOGLE AQUI ABAJO:
-  // EJEMPLO: const MANUAL_KEY = "AIzaSy...";
+  // EJEMPLO: const MANUAL_KEY = "AIzaSyDT9WS5rJZYFnqS-8TLHnFiofa-jhK46hM";
   // -----------------------------------------------------------------------
-  const MANUAL_KEY = ""; 
+  const MANUAL_KEY = "AIzaSyDT9WS5rJZYFnqS-8TLHnFiofa-jhK46hM"; 
 
   // Buscar la API Key en orden de prioridad (Manual > .env > Process)
   const apiKey = MANUAL_KEY || env.VITE_API_KEY || env.API_KEY || process.env.VITE_API_KEY || process.env.API_KEY || '';
