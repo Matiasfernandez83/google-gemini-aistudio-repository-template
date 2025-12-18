@@ -5,89 +5,72 @@ import { TruckRecord } from '../types';
 
 interface StatsProps {
   data: TruckRecord[];
-  onCardDoubleClick?: (type: 'total' | 'trucks' | 'owners' | 'ops') => void;
+  onCardClick?: (type: 'total' | 'trucks' | 'owners' | 'ops') => void;
 }
 
-export const Stats: React.FC<StatsProps> = ({ data, onCardDoubleClick }) => {
+export const Stats: React.FC<StatsProps> = ({ data, onCardClick }) => {
   const totalValue = data.reduce((acc, curr) => acc + curr.valor, 0);
-  const uniqueTrucks = new Set(data.map(d => d.patente)).size;
-  const uniqueOwners = new Set(data.map(d => d.dueno)).size;
+  const uniqueTrucks = new Set(data.map(d => d.patente).filter(Boolean)).size;
+  const uniqueOwners = new Set(data.map(d => d.dueno).filter(Boolean)).size;
 
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(val);
   };
 
-  const cardBase = "bg-white rounded-xl shadow-polaris hover:shadow-polaris-hover transition-all duration-300 overflow-hidden relative group cursor-pointer border border-slate-200";
+  const Card = ({ title, value, subtext, icon: Icon, colorClass, onClick, type }: any) => (
+    <div 
+        className="bg-white rounded-xl shadow-polaris p-6 flex justify-between items-center border border-slate-100 hover:shadow-md transition-shadow cursor-pointer group"
+        onClick={() => onClick?.(type)}
+    >
+        <div>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">{title}</p>
+            <h3 className="text-2xl font-extrabold text-slate-800 brand-font tracking-tight">{value}</h3>
+            <p className="text-[10px] text-slate-400 mt-1">{subtext}</p>
+        </div>
+        <div className={`p-3 rounded-full ${colorClass} bg-opacity-10 group-hover:scale-110 transition-transform`}>
+            <Icon size={24} className={colorClass.replace('bg-', 'text-')} />
+        </div>
+    </div>
+  );
 
   return (
     <div className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      
-      {/* Monto Total Card */}
-      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('total')}>
-        <div className="h-1.5 w-full bg-green-500 absolute top-0 left-0"></div>
-        <div className="p-6">
-            <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-lg bg-green-50 text-green-600">
-                    <DollarSign size={24} />
-                </div>
-                <span className="text-xs font-bold text-green-600 bg-green-50 px-2 py-1 rounded-full flex items-center gap-1">
-                    <TrendingUp size={12}/> Activo
-                </span>
-            </div>
-            <div>
-                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Monto Total</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{formatCurrency(totalValue)}</h3>
-            </div>
-        </div>
-      </div>
-
-      {/* Camiones Activos Card */}
-      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('trucks')}>
-         <div className="h-1.5 w-full bg-furlong-red absolute top-0 left-0"></div>
-         <div className="p-6">
-            <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-lg bg-red-50 text-furlong-red">
-                    <Truck size={24} />
-                </div>
-            </div>
-            <div>
-                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Flota Activa</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{uniqueTrucks} <span className="text-sm font-medium text-slate-400">unidades</span></h3>
-            </div>
-         </div>
-      </div>
-
-      {/* Dueños Card */}
-      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('owners')}>
-        <div className="h-1.5 w-full bg-blue-500 absolute top-0 left-0"></div>
-        <div className="p-6">
-            <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-lg bg-blue-50 text-blue-600">
-                    <Users size={24} />
-                </div>
-            </div>
-            <div>
-                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Proveedores</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{uniqueOwners} <span className="text-sm font-medium text-slate-400">titulares</span></h3>
-            </div>
-        </div>
-      </div>
-
-      {/* Operaciones Card */}
-      <div className={cardBase} onDoubleClick={() => onCardDoubleClick?.('ops')}>
-        <div className="h-1.5 w-full bg-purple-500 absolute top-0 left-0"></div>
-        <div className="p-6">
-            <div className="flex justify-between items-start mb-4">
-                <div className="p-3 rounded-lg bg-purple-50 text-purple-600">
-                    <Activity size={24} />
-                </div>
-            </div>
-            <div>
-                <p className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Operaciones</p>
-                <h3 className="text-2xl font-extrabold text-slate-800 mt-1 brand-font tracking-tight">{data.length} <span className="text-sm font-medium text-slate-400">registros</span></h3>
-            </div>
-        </div>
-      </div>
+      <Card 
+        title="Monto Total" 
+        value={formatCurrency(totalValue)} 
+        subtext="Total facturado" 
+        icon={DollarSign} 
+        colorClass="bg-green-500"
+        type="total"
+        onClick={onCardClick}
+      />
+      <Card 
+        title="Camiones Activos" 
+        value={uniqueTrucks} 
+        subtext="Patentes únicas detectadas" 
+        icon={Truck} 
+        colorClass="bg-blue-500"
+        type="trucks"
+        onClick={onCardClick}
+      />
+      <Card 
+        title="Dueños" 
+        value={uniqueOwners} 
+        subtext="Proveedores distintos" 
+        icon={Users} 
+        colorClass="bg-purple-500"
+        type="owners"
+        onClick={onCardClick}
+      />
+      <Card 
+        title="Operaciones" 
+        value={data.length} 
+        subtext="Registros procesados" 
+        icon={Activity} 
+        colorClass="bg-orange-500"
+        type="ops"
+        onClick={onCardClick}
+      />
     </div>
   );
 };

@@ -6,31 +6,33 @@ export interface TruckRecord {
   valor: number;
   concepto: string;
   fecha?: string; // Format YYYY-MM-DD
+  hora?: string;  // HH:mm
+  estacion?: string; // Cabina o peaje específico
+  categoria_vehiculo?: string; // Cat 1, 2, 3, etc.
   tag?: string;
   sourceFileId?: string;
   sourceFileName?: string;
   isVerified?: boolean;
-  registeredOwner?: string;
   equipo?: string;
-  // Internal Memory Optimization
-  searchIndex?: string; // Normalized string for fast search
+  searchIndex?: string;
+  isDuplicate?: boolean; // Para marcar registros que parecen repetidos
 }
 
 export interface CardStatement {
     id: string;
     sourceFileId: string;
-    banco: string;       // Galicia, Santander, Amex, etc.
-    titular: string;     // Nombre del dueño de la tarjeta
-    periodo: string;     // Ej: "01 Feb - 28 Feb"
-    fechaVencimiento: string; // YYYY-MM-DD
-    totalResumen: number; // El total a pagar de TODO el resumen (no solo peajes)
-    totalPeajes?: number; // Suma calculada de los items extraídos
+    banco: string;
+    titular: string;
+    periodo: string;
+    fechaVencimiento: string;
+    totalResumen: number;
+    totalPeajes?: number;
     timestamp: number;
 }
 
 export interface ExpenseRecord {
   id: string;
-  statementId?: string; // Link to parent statement
+  statementId?: string;
   fecha: string;
   concepto: string;
   monto: number;
@@ -87,14 +89,7 @@ export interface UploadedFile {
   type: string;
   size: number;
   content: string | ArrayBuffer | null;
-  originalFile?: File;
   timestamp?: number;
-}
-
-export enum FileType {
-  PDF = 'application/pdf',
-  EXCEL = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  EXCEL_OLD = 'application/vnd.ms-excel',
 }
 
 export type View = 'dashboard' | 'import' | 'reports' | 'settings' | 'expenses';
@@ -103,7 +98,7 @@ export interface ModalData {
     isOpen: boolean;
     title: string;
     type: 'list' | 'detail';
-    dataType?: 'truck' | 'expense'; // Added to handle different column rendering
+    dataType?: 'truck' | 'expense';
     records?: TruckRecord[] | ExpenseRecord[];
     singleRecord?: TruckRecord;
 }
@@ -115,21 +110,11 @@ export interface User {
     name: string;
     role: 'admin' | 'user';
     createdAt: number;
-    isActive: boolean; // New field for security
+    isActive: boolean;
 }
 
 export interface ThemeSettings {
     primaryColor: 'blue' | 'green' | 'purple' | 'slate' | 'orange';
     fontFamily: 'inter' | 'roboto' | 'mono';
     processingMode?: 'free' | 'fast';
-}
-
-export interface AppConfig {
-    theme: ThemeSettings;
-    currentUser: User | null;
-}
-
-export interface PaginationState {
-    currentPage: number;
-    itemsPerPage: number;
 }

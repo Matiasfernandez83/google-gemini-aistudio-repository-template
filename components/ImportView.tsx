@@ -1,6 +1,6 @@
 
 import React, { useRef, useState } from 'react';
-import { UploadCloud, FileText, FileSpreadsheet, X, Loader2, AlertCircle, CheckCircle2, Database, Clock, ArrowRight, Zap } from 'lucide-react';
+import { UploadCloud, FileText, FileSpreadsheet, X, Loader2, AlertCircle, CheckCircle2, Database, Clock, ArrowRight, Zap, Coffee } from 'lucide-react';
 import { ThemeSettings, ProcessingStatus } from '../types';
 import clsx from 'clsx';
 
@@ -21,6 +21,7 @@ export const ImportView: React.FC<ImportViewProps> = ({
     onFileSelect, 
     onRemoveFile, 
     onProcess, 
+    theme,
     fleetDbCount,
     onDbUpload
 }) => {
@@ -48,6 +49,8 @@ export const ImportView: React.FC<ImportViewProps> = ({
         }
     };
 
+    const isFastMode = theme.processingMode === 'fast';
+
     return (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             
@@ -62,8 +65,16 @@ export const ImportView: React.FC<ImportViewProps> = ({
                         <p className="text-sm text-slate-500 mt-1">Sube PDFs de resumen o planillas Excel de control.</p>
                     </div>
                     {/* Visual Indicator for grouped invoices */}
-                    <div className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold border border-blue-100 uppercase tracking-wide">
-                        <Zap size={12} /> Detecta Facturas Agrupadas
+                    <div className="hidden md:flex items-center gap-3">
+                        {isFastMode ? (
+                             <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-bold border border-blue-100 uppercase tracking-wide">
+                                <Zap size={12} className="fill-current"/> Modo Turbo Activo
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold border border-slate-200 uppercase tracking-wide">
+                                <Coffee size={12} /> Modo Seguro (Gratis)
+                            </div>
+                        )}
                     </div>
                 </div>
                 
@@ -124,7 +135,15 @@ export const ImportView: React.FC<ImportViewProps> = ({
                                 )}
                             >
                                 {status.isProcessing ? (
-                                    <> <Loader2 className="animate-spin" size={22} /> <span>Procesando {status.processedCount}/{status.totalCount}</span> </>
+                                    <> 
+                                        <Loader2 className="animate-spin" size={22} /> 
+                                        <div className="flex flex-col text-left leading-none ml-2">
+                                            <span>Procesando {status.processedCount}/{status.totalCount}</span>
+                                            <span className="text-[10px] opacity-80 font-normal uppercase mt-1">
+                                                {isFastMode ? '⚡ Modo Turbo Activado' : '☕ Modo Seguro (Lento)'}
+                                            </span>
+                                        </div>
+                                    </>
                                 ) : (
                                     <> <span>Iniciar Procesamiento</span> <ArrowRight size={20} /> </>
                                 )}
