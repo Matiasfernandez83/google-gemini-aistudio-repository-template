@@ -27,7 +27,8 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
       result = result.filter(d => 
           (d.patente || '').toLowerCase().includes(low) || 
           (d.dueno || '').toLowerCase().includes(low) || 
-          (d.tag || '').toLowerCase().includes(low)
+          (d.tag || '').toLowerCase().includes(low) ||
+          (d.equipo || '').toLowerCase().includes(low)
       );
     }
 
@@ -58,7 +59,6 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
   const paginatedData = processedData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPages = Math.ceil(processedData.length / itemsPerPage) || 1;
 
-  // Reset page when switching views
   useEffect(() => {
     setCurrentPage(1);
     setSelectedIds([]);
@@ -66,9 +66,9 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
 
   const toggleSelectAll = () => {
     const currentIds = paginatedData.map(d => d.id);
-    const allSelected = currentIds.every(id => selectedIds.includes(id));
+    const allSelectedInView = currentIds.every(id => selectedIds.includes(id));
     
-    if (allSelected) {
+    if (allSelectedInView) {
       setSelectedIds(prev => prev.filter(id => !currentIds.includes(id)));
     } else {
       setSelectedIds(prev => Array.from(new Set([...prev, ...currentIds])));
@@ -102,16 +102,18 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
         EQUIPO: d.equipo || '---',
         RESPONSABLE: d.dueno || 'Desconocido',
         TAG: d.tag || '',
-        ESTADO: d.isVerified ? 'OK' : 'PEND',
+        ESTADO: d.isVerified ? 'VERIFICADO' : 'NO CARGADO',
         VALOR: d.valor,
-        CONCEPTO: isConsolidated ? `UNIFICADO (${d.pasesCount} PASES)` : (d.concepto || 'PEAJE'),
-        FECHA: isConsolidated ? 'RESUMEN' : (d.fecha || ''),
-        ARCHIVO: isConsolidated ? 'CONSOLIDADO' : (d.sourceFileName || '')
+        TIPO_VISTA: isConsolidated ? 'CONSOLIDADO' : 'DETALLE',
+        CONCEPTO: isConsolidated ? `TOTAL ACUMULADO (${d.pasesCount} PASES)` : (d.concepto || 'PEAJE'),
+        FECHA: isConsolidated ? 'Varios' : (d.fecha || ''),
+        FILE: d.sourceFileName || ''
     })));
+    
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
-    const suffix = onlySelected ? 'Seleccionados' : (isConsolidated ? 'Consolidado' : 'Detallado');
-    XLSX.writeFile(wb, `Furlong_${suffix}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+    const suffix = onlySelected ? 'Seleccionados' : (isConsolidated ? 'Consolidado' : 'General');
+    XLSX.writeFile(wb, `Furlong_${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   const isAllSelected = paginatedData.length > 0 && paginatedData.every(d => selectedIds.includes(d.id));
@@ -147,9 +149,9 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
             {selectedIds.length > 0 && (
               <button 
                 onClick={() => handleExport(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-md hover:bg-blue-700 transition-all animate-in fade-in slide-in-from-right-2"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-[11px] font-black uppercase shadow-md hover:bg-blue-700 transition-all animate-in slide-in-from-right-2"
               >
-                <Download size={16} /> Descargar Seleccionados ({selectedIds.length})
+                <Download size={16} /> Descargar ({selectedIds.length})
               </button>
             )}
             
@@ -157,8 +159,8 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input 
                     type="text" 
-                    placeholder="Buscar..." 
-                    className="pl-9 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-furlong-red/20 w-full sm:w-64"
+                    placeholder="Filtrar por patente, tag, equipo..." 
+                    className="pl-9 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-furlong-red/20 w-full sm:w-80"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
@@ -180,13 +182,13 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                 </button>
               </th>
               <th className="px-6 py-4">Patente</th>
-              <th className="px-6 py-4">N° Equipo</th>
-              <th className="px-6 py-4">Responsable {isConsolidated && '(Unificado)'}</th>
+              <th className="px-6 py-4">Equipo</th>
+              <th className="px-6 py-4">Responsable</th>
               <th className="px-6 py-4">Tag ID</th>
-              <th className="px-6 py-4">{isConsolidated ? 'Cant. Pases' : 'Estado'}</th>
-              <th className="px-6 py-4">{isConsolidated ? 'Última Fecha' : 'Fecha'}</th>
-              <th className="px-6 py-4 text-right">{isConsolidated ? 'Monto Total' : 'Tarifa'}</th>
-              <th className="px-6 py-4 text-center">Acción</th>
+              <th className="px-6 py-4">{isConsolidated ? 'Movs' : 'Estado'}</th>
+              <th className="px-6 py-4">{isConsolidated ? 'Periodo' : 'Fecha'}</th>
+              <th className="px-6 py-4 text-right">Monto</th>
+              <th className="px-6 py-4 text-center">Ver</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -206,39 +208,39 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                    </button>
                 </td>
                 <td className="px-6 py-4">
-                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100 uppercase">{item.patente || 'N/A'}</span>
+                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[11px] font-black border border-blue-100 uppercase tracking-tighter shadow-sm">{item.patente || 'N/A'}</span>
                 </td>
                 <td className="px-6 py-4">
-                    <div className="flex items-center gap-2 text-slate-700 font-bold text-sm">
-                        <Truck size={14} className="text-slate-400" />
+                    <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                        <Truck size={12} className="text-slate-400" />
                         {item.equipo || '---'}
                     </div>
                 </td>
-                <td className="px-6 py-4 text-slate-600 font-medium text-sm">{item.dueno}</td>
-                <td className="px-6 py-4 text-slate-500 font-mono text-xs flex items-center gap-1">
-                    <Tag size={12} className="text-slate-300" />
+                <td className="px-6 py-4 text-slate-600 font-medium text-xs truncate max-w-[140px]">{item.dueno}</td>
+                <td className="px-6 py-4 text-slate-500 font-mono text-[10px] flex items-center gap-1">
+                    <Tag size={10} className="text-slate-300" />
                     {item.tag || '---'}
                 </td>
                 <td className="px-6 py-4">
                     {isConsolidated ? (
                         <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-black border border-slate-200">
-                            {item.pasesCount} MOV.
+                            {item.pasesCount} PASES
                         </span>
                     ) : (
                         item.isVerified ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-600 text-[10px] font-bold border border-green-100 uppercase">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-600 text-[9px] font-black border border-green-100 uppercase">
                                 <CheckCircle2 size={10} /> OK
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[10px] font-bold border border-amber-100 uppercase">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[9px] font-black border border-amber-100 uppercase">
                                 <AlertCircle size={10} /> PEND
                             </span>
                         )
                     )}
                 </td>
-                <td className="px-6 py-4 text-slate-500 text-sm whitespace-nowrap">{item.fecha}</td>
+                <td className="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">{item.fecha}</td>
                 <td className="px-6 py-4 text-right">
-                    <span className={clsx("font-mono font-extrabold text-sm", isConsolidated ? "text-furlong-red" : "text-slate-900")}>
+                    <span className={clsx("font-mono font-black text-sm", isConsolidated ? "text-furlong-red" : "text-slate-900")}>
                         {new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(item.valor)}
                     </span>
                 </td>
@@ -247,7 +249,7 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                         onClick={(e) => { e.stopPropagation(); if(item.sourceFileId) onViewFile?.(item.sourceFileId); }}
                         className="p-1.5 text-slate-400 hover:text-furlong-red hover:bg-red-50 rounded-lg transition-all"
                     >
-                        <ExternalLink size={16} />
+                        <ExternalLink size={14} />
                     </button>
                 </td>
               </tr>
@@ -256,22 +258,21 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
         </table>
       </div>
 
-      {/* Footer con Salto de Página Puntual */}
       <div className="p-4 bg-slate-50/50 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <span className="text-xs text-slate-500 font-bold uppercase tracking-tight">
+        <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
           Mostrando {processedData.length > 0 ? (currentPage-1)*itemsPerPage+1 : 0}-{Math.min(currentPage*itemsPerPage, processedData.length)} de {processedData.length}
         </span>
         
         <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Página</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Salto a Hoja</span>
                 <input 
                   type="number" 
                   min="1" 
                   max={totalPages} 
                   value={currentPage} 
                   onChange={handlePageJump}
-                  className="w-12 h-8 text-center border border-slate-200 rounded-md text-xs font-bold focus:ring-1 focus:ring-furlong-red outline-none"
+                  className="w-12 h-8 text-center border border-slate-200 rounded-md text-xs font-bold focus:ring-1 focus:ring-furlong-red outline-none shadow-sm"
                 />
                 <span className="text-[10px] font-bold text-slate-400 uppercase">de {totalPages}</span>
             </div>
