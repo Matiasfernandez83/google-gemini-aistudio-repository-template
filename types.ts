@@ -16,6 +16,8 @@ export interface TruckRecord {
   equipo?: string;
   searchIndex?: string;
   isDuplicate?: boolean; // Para marcar registros que parecen repetidos
+  documentTotal?: number; // Monto total que figura en el pie de la factura
+  balanceDiff?: number;   // Diferencia entre suma de items y total factura
 }
 
 export interface CardStatement {

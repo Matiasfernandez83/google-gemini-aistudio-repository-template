@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Search, ChevronLeft, ChevronRight, ExternalLink, FileSpreadsheet, CheckCircle2, AlertCircle, Truck, Tag, Layers, List, Download, CheckSquare, Square } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, ExternalLink, FileSpreadsheet, CheckCircle2, AlertCircle, Truck, Tag, Layers, List, Download, CheckSquare, Square, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { TruckRecord } from '../types';
 import clsx from 'clsx';
 
@@ -21,7 +21,6 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
   const processedData = useMemo(() => {
     let result = [...data];
     
-    // Búsqueda inicial
     if (searchTerm) {
       const low = searchTerm.toLowerCase();
       result = result.filter(d => 
@@ -32,7 +31,6 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
       );
     }
 
-    // Unificación (Consolidación)
     if (isConsolidated) {
       const groups = result.reduce((acc, curr) => {
         const key = curr.tag || curr.patente || 'SIN_ID';
@@ -185,7 +183,7 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
               <th className="px-6 py-4">Equipo</th>
               <th className="px-6 py-4">Responsable</th>
               <th className="px-6 py-4">Tag ID</th>
-              <th className="px-6 py-4">{isConsolidated ? 'Movs' : 'Estado'}</th>
+              <th className="px-6 py-4">Control</th>
               <th className="px-6 py-4">{isConsolidated ? 'Periodo' : 'Fecha'}</th>
               <th className="px-6 py-4 text-right">Monto</th>
               <th className="px-6 py-4 text-center">Ver</th>
@@ -227,20 +225,20 @@ export const DataTable: React.FC<DataTableProps> = ({ data, onRowDoubleClick, on
                             {item.pasesCount} PASES
                         </span>
                     ) : (
-                        item.isVerified ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-600 text-[9px] font-black border border-green-100 uppercase">
-                                <CheckCircle2 size={10} /> OK
+                        item.balanceDiff !== undefined && item.balanceDiff < 5 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-50 text-green-600 text-[9px] font-black border border-green-100 uppercase" title="Cuadre perfecto con pie de factura">
+                                <ShieldCheck size={10} /> CUADRADO
                             </span>
                         ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 text-[9px] font-black border border-amber-100 uppercase">
-                                <AlertCircle size={10} /> PEND
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[9px] font-black border border-red-100 uppercase" title={`Error de cuadre: diferencia de $${item.balanceDiff}`}>
+                                <ShieldAlert size={10} /> ERROR FC
                             </span>
                         )
                     )}
                 </td>
                 <td className="px-6 py-4 text-slate-500 text-xs whitespace-nowrap">{item.fecha}</td>
                 <td className="px-6 py-4 text-right">
-                    <span className={clsx("font-mono font-black text-sm", isConsolidated ? "text-furlong-red" : "text-slate-900")}>
+                    <span className={clsx("font-mono font-black text-sm", isConsolidated ? "text-furlong-red" : (item.tag === 'BONIFICACION' ? 'text-green-600' : 'text-slate-900'))}>
                         {new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(item.valor)}
                     </span>
                 </td>
